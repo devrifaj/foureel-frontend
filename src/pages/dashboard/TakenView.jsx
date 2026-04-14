@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DndContext, closestCenter, DragOverlay } from '@dnd-kit/core';
+import { DndContext, closestCenter, DragOverlay, useDroppable } from '@dnd-kit/core';
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { getTasks, getClients, createTask, updateTask, archiveTask } from '../../api';
@@ -60,6 +60,19 @@ function TaskCard({ task, onClick }) {
   );
 }
 
+function KanbanColumn({ columnId, title, count, children }) {
+  const { setNodeRef, isOver } = useDroppable({ id: columnId });
+  return (
+    <div ref={setNodeRef} className={`kanban-col${isOver ? ' is-over' : ''}`} data-col={columnId}>
+      <div className="col-header">
+        <span className="col-title">{title}</span>
+        <span className="col-count">{count}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export default function TakenView() {
   const { t } = useLang();
   const [filter, setFilter] = useState('all');
@@ -72,7 +85,31 @@ export default function TakenView() {
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks'], queryFn: getTasks });
   const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: getClients });
 
-  const updateMut = useMutation({ mutationFn: ({ id, ...d }) => updateTask(id, d), onSuccess: () => qc.invalidateQueries(['tasks']) });
+  const updateMut = useMutation({
+    mutationFn: ({ id, ...d }) => updateTask(id, d),
+    onMutate: async ({ id, ...data }) => {
+      await qc.cancelQueries({ queryKey: ['tasks'] });
+      const previousTasks = qc.getQueryData(['tasks']) || [];
+
+      qc.setQueryData(['tasks'], (current = []) =>
+        current.map((task) => (task._id === id ? { ...task, ...data } : task)),
+      );
+
+      if (taskModal?._id === id) {
+        setTaskModal((prev) => (prev ? { ...prev, ...data } : prev));
+      }
+
+      return { previousTasks };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousTasks) {
+        qc.setQueryData(['tasks'], context.previousTasks);
+      }
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
   const createMut = useMutation({
     mutationFn: createTask,
     onSuccess: () => {
@@ -92,7 +129,10 @@ export default function TakenView() {
   const filtered = filter === 'all' ? tasks : tasks.filter((x) => x.assignee === filter);
 
   const handleDragEnd = ({ active, over }) => {
-    if (!over) return;
+    if (!over) {
+      setActiveId(null);
+      return;
+    }
     let nextCol = null;
     const overId = String(over.id);
     if (COLS.some((c) => c.id === overId)) {
@@ -101,7 +141,8 @@ export default function TakenView() {
       const overTask = filtered.find((t) => t._id === overId) || tasks.find((t) => t._id === overId);
       nextCol = overTask?.column || null;
     }
-    if (nextCol) {
+    const activeTaskItem = tasks.find((t) => t._id === active.id);
+    if (nextCol && activeTaskItem?.column !== nextCol) {
       updateMut.mutate({ id: active.id, column: nextCol });
     }
     setActiveId(null);
@@ -142,17 +183,18 @@ export default function TakenView() {
         </div>
       </div>
 
-      <DndContext collisionDetection={closestCenter} onDragStart={({ active }) => setActiveId(active.id)} onDragEnd={handleDragEnd}>
+      <DndContext
+        collisionDetection={closestCenter}
+        onDragStart={({ active }) => setActiveId(active.id)}
+        onDragEnd={handleDragEnd}
+        onDragCancel={() => setActiveId(null)}
+      >
         <div className="kanban-board">
           {COLS.map((col) => {
             const colTasks = filtered.filter((x) => x.column === col.id);
             return (
               <SortableContext key={col.id} items={colTasks.map((x) => x._id)} strategy={verticalListSortingStrategy}>
-                <div className="kanban-col" data-col={col.id}>
-                  <div className="col-header">
-                    <span className="col-title">{t(col.id)}</span>
-                    <span className="col-count">{colTasks.length}</span>
-                  </div>
+                <KanbanColumn columnId={col.id} title={t(col.id)} count={colTasks.length}>
                   {colTasks.map((task) => (
                     <TaskCard key={task._id} task={task} onClick={setTaskModal} />
                   ))}
@@ -166,7 +208,7 @@ export default function TakenView() {
                       {t('addTask')}
                     </button>
                   )}
-                </div>
+                </KanbanColumn>
               </SortableContext>
             );
           })}

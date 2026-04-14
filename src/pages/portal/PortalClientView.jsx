@@ -191,6 +191,20 @@ export default function PortalClientView() {
   const revisionMut = useMutation({ mutationFn: ({id,n})=>requestRevision(id,n), onSuccess: ()=>{ setRevisionModal(null); setRevisionNote(''); qc.invalidateQueries(['portalMe']); }});
 
   useEffect(() => {
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+
+    // Global layout locks body scrolling for dashboard; unlock it for portal page.
+    document.documentElement.style.overflow = 'auto';
+    document.body.style.overflow = 'auto';
+
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
     if (data && !data.questionnaire?.submitted && !localStorage.getItem(`q_opened_${user?.clientId}`)) {
       localStorage.setItem(`q_opened_${user?.clientId}`, '1');
       setShowQuestionnaire(true);
@@ -205,6 +219,7 @@ export default function PortalClientView() {
 
   const { client={}, notes=[], reviewVideos=[], deliveredBatches=[], retainer } = data||{};
   const initials = (client.name||'').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  const deliveredCount = deliveredBatches.reduce((sum, batch) => sum + (batch.videos?.length || 0), 0);
 
   return (
     <div style={{minHeight:'100vh',background:'var(--bg)'}}>
@@ -235,13 +250,17 @@ export default function PortalClientView() {
         </div>
 
         {/* Shoot info */}
-        {client.shoot && (
-          <div className="portal-section">
-            <div className="section-header">
-              <div className="section-title">📅 Volgende shoot</div>
+        <div className="portal-section">
+          <div className="section-header">
+            <div className="section-title">📅 Volgende shoot</div>
+            {!!client.shoot && (
               <div><span className={`shoot-badge badge-${client.shoot.status||'planned'}`}>{client.shoot.status==='wrapped'?'Afgerond':client.shoot.status==='soon'?'Bijna!':'Gepland'}</span></div>
-            </div>
-            <div className="section-body">
+            )}
+          </div>
+          <div className="section-body">
+            {!client.shoot ? (
+              <div className="empty-state"><div className="emoji">📷</div><p>Nog geen shoot gepland. Je hoort snel van ons!</p></div>
+            ) : (
               <div className="shoot-info">
                 <div>
                   <div className="shoot-name">{client.shoot.name}</div>
@@ -249,10 +268,16 @@ export default function PortalClientView() {
                   {client.shoot.location && <div className="shoot-detail"><span className="shoot-detail-icon">📍</span><strong>Locatie:</strong>&nbsp;{client.shoot.location}</div>}
                   {client.shoot.info && <div className="shoot-detail"><span className="shoot-detail-icon">ℹ️</span><span>{client.shoot.info}</span></div>}
                 </div>
+                <div className="deliverables-box">
+                  <div className="deliverables-title">Deliverables</div>
+                  <div className="deliverable-item">📹 Brand video</div>
+                  <div className="deliverable-item">📲 Social cuts (9:16)</div>
+                  <div className="deliverable-item">✂️ Behind the scenes</div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Videos for review */}
         <div className="portal-section" id="section-review">
@@ -303,27 +328,38 @@ export default function PortalClientView() {
         </div>
 
         {/* Delivered */}
-        {deliveredBatches.length > 0 && (
-          <div className="portal-section" id="section-delivered">
-            <div className="section-header">
-              <div className="section-title">📦 Opgeleverd & goedgekeurd</div>
-              <div style={{fontSize:'12px',color:'var(--sage)'}}>{deliveredBatches.reduce((s,b)=>s+b.videos.length,0)} video's</div>
-            </div>
-            <div className="section-body">
-              {deliveredBatches.map((b,i) => (
-                <div key={i} style={{marginBottom:'16px'}}>
-                  <div style={{fontFamily:'Montserrat',fontSize:'13px',fontWeight:'600',marginBottom:'8px',color:'var(--text)'}}>{b.name}</div>
-                  {b.videos.map((v,j) => (
-                    <div key={j} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'var(--bg-alt)',borderRadius:'8px',marginBottom:'6px',border:'1px solid var(--border)'}}>
-                      <div style={{fontSize:'13px'}}>✅ {v.name}</div>
-                      {v.driveUrl && <a href={v.driveUrl} target="_blank" rel="noopener" style={{fontSize:'12px',color:'var(--blue)',fontWeight:'500'}}>⬇ Download</a>}
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
+        <div className="portal-section" id="section-delivered">
+          <div className="section-header">
+            <div className="section-title">📦 Opgeleverd & goedgekeurd</div>
+            {deliveredCount > 0 && <div style={{fontSize:'12px',color:'var(--sage)'}}>{deliveredCount} video's</div>}
           </div>
-        )}
+          <div className="section-body">
+            {deliveredBatches.length === 0 ? (
+              <div className="empty-state"><div className="emoji">🎉</div><p>Nog niets opgeleverd — maar dat komt eraan!</p></div>
+            ) : (
+              deliveredBatches.map((batch) => (
+                <div key={batch.name} className="delivered-batch">
+                  <div className="delivered-batch-header">
+                    <div className="delivered-batch-name">📦 {batch.name}</div>
+                    <div className="delivered-batch-date">{new Date(batch.date).toLocaleDateString('nl-NL')}</div>
+                  </div>
+                  <div className="delivered-video-list">
+                    {(batch.videos || []).map((video) => (
+                      <div key={`${batch.name}-${video.name}`} className="delivered-video-row">
+                        <div className="delivered-video-name">✓ {video.name}</div>
+                        {video.driveUrl ? (
+                          <a className="drive-download-btn" href={video.driveUrl} target="_blank" rel="noopener">Download via Drive</a>
+                        ) : (
+                          <span style={{fontSize:'11px',color:'var(--text-3)',fontStyle:'italic'}}>Drive link binnenkort</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
 
         {/* Retainer */}
         {retainer && (
@@ -353,10 +389,11 @@ export default function PortalClientView() {
           <div className="section-body">
             <div className="notes-list">
               {notes.map(n => (
-                <div key={n._id} className={`note-item ${n.from}`}>
-                  <div className="note-author">{n.author}</div>
-                  <div className="note-text">{n.text}</div>
-                  <div className="note-time">{new Date(n.createdAt).toLocaleDateString('nl-NL')}</div>
+                <div key={n._id} style={{display:'flex',justifyContent:n.from === 'client' ? 'flex-start' : 'flex-end'}}>
+                  <div className={`note-bubble ${n.from === 'client' ? 'client' : 'studio'}`}>
+                    <div className="note-meta">{n.author} · {new Date(n.createdAt).toLocaleDateString('nl-NL')}</div>
+                    {n.text}
+                  </div>
                 </div>
               ))}
               {notes.length===0 && <div style={{fontSize:'13px',color:'var(--text-3)',fontStyle:'italic',padding:'8px 0'}}>Nog geen berichten</div>}

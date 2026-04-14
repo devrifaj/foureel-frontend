@@ -314,7 +314,7 @@ export default function PortalTeamView() {
                           textOverflow: "ellipsis",
                         }}
                       >
-                        {c.portalEmail || c.email || "Geen portal e-mail"}
+                        {c.email || "Geen portal e-mail"}
                       </div>
                     </div>
                     {unread > 0 && (

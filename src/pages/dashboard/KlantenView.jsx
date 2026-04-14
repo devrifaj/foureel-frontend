@@ -543,6 +543,8 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
   const [since, setSince] = useState('');
   const [urgent, setUrgent] = useState(false);
   const [urgentReason, setUrgentReason] = useState('');
+  const [portalEmail, setPortalEmail] = useState('');
+  const [portalPassword, setPortalPassword] = useState('');
   const [nameError, setNameError] = useState('');
 
   useEffect(() => {
@@ -556,6 +558,8 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
       setSince('');
       setUrgent(false);
       setUrgentReason('');
+      setPortalEmail('');
+      setPortalPassword('');
       setNameError('');
     }
   }, [open]);
@@ -585,6 +589,8 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
       urgent,
       urgentReason: urgent ? urgentReason.trim() || undefined : undefined,
       color: pickColor(name),
+      portalEmail: portalEmail.trim().toLowerCase() || undefined,
+      portalPassword: portalPassword.trim() || undefined,
     });
   };
 
@@ -697,6 +703,32 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
               }}
             />
           </div>
+          <div className="form-group">
+            <label className="form-label">{lang === 'en' ? 'Portal login email' : 'Portaal login e-mail'}</label>
+            <input
+              className="form-input"
+              type="email"
+              value={portalEmail}
+              onChange={(e) => {
+                setPortalEmail(e.target.value);
+                clearServerError();
+              }}
+              placeholder="client@bedrijf.nl"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">{lang === 'en' ? 'Portal login password' : 'Portaal login wachtwoord'}</label>
+            <input
+              className="form-input"
+              type="password"
+              value={portalPassword}
+              onChange={(e) => {
+                setPortalPassword(e.target.value);
+                clearServerError();
+              }}
+              placeholder={lang === 'en' ? 'Set initial password' : 'Stel initieel wachtwoord in'}
+            />
+          </div>
         </div>
         <hr className="form-divider" />
         <div className="toggle-row">
@@ -776,16 +808,127 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
   );
 }
 
+function DeleteClientModal({ open, onClose, onConfirm, deleting, lang, clientName }) {
+  if (!open) return null;
+
+  return (
+    <div className="modal-overlay open" role="dialog" aria-modal="true" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">{lang === 'en' ? 'Delete client' : 'Klant verwijderen'}</div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label={lang === 'en' ? 'Close' : 'Sluiten'}>
+            ✕
+          </button>
+        </div>
+        <p style={{ fontSize: '14px', color: 'var(--text-2)', marginTop: 0 }}>
+          {lang === 'en'
+            ? `Permanently delete "${clientName}"? This cannot be undone.`
+            : `"${clientName}" permanent verwijderen? Dit kan niet ongedaan worden gemaakt.`}
+        </p>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={deleting}>
+            {lang === 'en' ? 'Cancel' : 'Annuleer'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={onConfirm}
+            disabled={deleting}
+            style={{ background: '#c04040', borderColor: '#c04040' }}
+          >
+            {deleting ? (lang === 'en' ? 'Deleting…' : 'Verwijderen…') : lang === 'en' ? 'Delete permanently' : 'Permanent verwijderen'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortalAccessModal({ open, onClose, onSave, saving, lang, currentEmail, serverError, onClearServerError }) {
+  const [portalEmail, setPortalEmail] = useState('');
+  const [portalPassword, setPortalPassword] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setPortalEmail(currentEmail || '');
+    setPortalPassword('');
+  }, [open, currentEmail]);
+
+  if (!open) return null;
+
+  const save = () => {
+    onSave({
+      portalEmail: portalEmail.trim().toLowerCase() || undefined,
+      portalPassword: portalPassword.trim() || undefined,
+    });
+  };
+
+  return (
+    <div className="modal-overlay open" role="dialog" aria-modal="true" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">{lang === 'en' ? 'Portal access' : 'Portaaltoegang'}</div>
+          <button type="button" className="modal-close" onClick={onClose} aria-label={lang === 'en' ? 'Close' : 'Sluiten'}>
+            ✕
+          </button>
+        </div>
+        <div className="form-group">
+          <label className="form-label">{lang === 'en' ? 'Portal login email' : 'Portaal login e-mail'}</label>
+          <input
+            className="form-input"
+            type="email"
+            value={portalEmail}
+            onChange={(e) => {
+              setPortalEmail(e.target.value);
+              onClearServerError?.();
+            }}
+            placeholder="client@bedrijf.nl"
+          />
+        </div>
+        <div className="form-group" style={{ marginBottom: 0 }}>
+          <label className="form-label">{lang === 'en' ? 'New password (optional)' : 'Nieuw wachtwoord (optioneel)'}</label>
+          <input
+            className="form-input"
+            type="password"
+            value={portalPassword}
+            onChange={(e) => {
+              setPortalPassword(e.target.value);
+              onClearServerError?.();
+            }}
+            placeholder={lang === 'en' ? 'Only fill to set/reset password' : 'Alleen invullen om wachtwoord te zetten/resetten'}
+          />
+        </div>
+        {serverError && (
+          <p role="alert" style={{ ...fieldErrStyle, marginTop: '10px' }}>
+            {serverError}
+          </p>
+        )}
+        <div className="modal-footer">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            {lang === 'en' ? 'Cancel' : 'Annuleer'}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? (lang === 'en' ? 'Saving…' : 'Opslaan…') : lang === 'en' ? 'Save access' : 'Toegang opslaan'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function KlantenView() {
   const { t, lang } = useLang();
   const [selectedId, setSelectedId] = useState(null);
   const [tab, setTab] = useState('info');
   const [addOpen, setAddOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [portalAccessOpen, setPortalAccessOpen] = useState(false);
   const [addSaveError, setAddSaveError] = useState('');
   const [deleteError, setDeleteError] = useState('');
+  const [portalAccessError, setPortalAccessError] = useState('');
   const qc = useQueryClient();
 
-  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: getClients });
+  const { data: clients = [], isLoading: isClientsLoading } = useQuery({ queryKey: ['clients'], queryFn: getClients });
   const { data: selectedFresh } = useQuery({
     queryKey: ['client', selectedId],
     queryFn: () => getClient(selectedId),
@@ -818,10 +961,25 @@ export default function KlantenView() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['clients'] });
       setDeleteError('');
+      setDeleteOpen(false);
       setSelectedId(null);
     },
     onError: (e) =>
       setDeleteError(e.message || (lang === 'en' ? 'Could not delete client.' : 'Klant kon niet worden verwijderd.')),
+  });
+
+  const portalAccessMut = useMutation({
+    mutationFn: ({ id, ...d }) => updateClient(id, d),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['clients'] });
+      qc.invalidateQueries({ queryKey: ['client', data._id] });
+      setPortalAccessError('');
+      setPortalAccessOpen(false);
+    },
+    onError: (e) =>
+      setPortalAccessError(
+        e.message || (lang === 'en' ? 'Could not save portal access.' : 'Portaaltoegang kon niet worden opgeslagen.'),
+      ),
   });
 
   const subtitle =
@@ -836,6 +994,9 @@ export default function KlantenView() {
 
   const backToList = () => {
     setDeleteError('');
+    setDeleteOpen(false);
+    setPortalAccessError('');
+    setPortalAccessOpen(false);
     setSelectedId(null);
   };
 
@@ -847,12 +1008,17 @@ export default function KlantenView() {
   const deleteCurrent = () => {
     if (!selected) return;
     setDeleteError('');
-    const msg =
-      lang === 'en'
-        ? `Permanently delete "${selected.name}"? This cannot be undone.`
-        : `"${selected.name}" permanent verwijderen? Dit kan niet ongedaan worden gemaakt.`;
-    if (!confirm(msg)) return;
+    setDeleteOpen(true);
+  };
+
+  const confirmDeleteCurrent = () => {
+    if (!selected) return;
     deleteMut.mutate(selected._id);
+  };
+
+  const openPortalAccess = () => {
+    setPortalAccessError('');
+    setPortalAccessOpen(true);
   };
 
   const addModal = (
@@ -888,7 +1054,15 @@ export default function KlantenView() {
               ← {lang === 'en' ? 'Back to overview' : 'Terug naar overzicht'}
             </button>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              {c.portalEmail && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={openPortalAccess}
+                style={{ borderColor: 'var(--border)' }}
+              >
+                🔐 {c.portalEmail ? (lang === 'en' ? 'Portal access' : 'Portaaltoegang') : (lang === 'en' ? 'Set portal access' : 'Portaaltoegang instellen')}
+              </button>
+              {c.portalEmail ? (
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
@@ -897,7 +1071,7 @@ export default function KlantenView() {
                 >
                   🌐 {lang === 'en' ? 'View portal' : 'Portaal bekijken'}
                 </button>
-              )}
+              ) : null}
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
@@ -945,7 +1119,7 @@ export default function KlantenView() {
                 <div className="detail-grid">
                   {[
                     [t('contact'), c.contact],
-                    ['E-mail', c.email],
+                    ['E-mail', c.portalEmail || c.email],
                     [t('phone'), c.phone],
                     [t('clientSince'), fmtDate(c.since)],
                     [t('phase'), c.phase],
@@ -1046,6 +1220,24 @@ export default function KlantenView() {
         </div>
         </section>
         {addModal}
+        <DeleteClientModal
+          open={deleteOpen}
+          onClose={() => setDeleteOpen(false)}
+          onConfirm={confirmDeleteCurrent}
+          deleting={deleteMut.isPending}
+          lang={lang}
+          clientName={selected?.name || ''}
+        />
+        <PortalAccessModal
+          open={portalAccessOpen}
+          onClose={() => setPortalAccessOpen(false)}
+          onSave={(payload) => portalAccessMut.mutate({ id: selected?._id, ...payload })}
+          saving={portalAccessMut.isPending}
+          lang={lang}
+          currentEmail={selected?.portalEmail || ''}
+          serverError={portalAccessError}
+          onClearServerError={() => setPortalAccessError('')}
+        />
       </>
     );
   }
@@ -1081,7 +1273,49 @@ export default function KlantenView() {
       </div>
       <div className="client-list-wrap">
         <div className="client-list">
-          {clients.length === 0 ? (
+          {isClientsLoading ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={`client-skeleton-${i}`}
+                className="client-row"
+                aria-hidden="true"
+                style={{
+                  pointerEvents: 'none',
+                  opacity: 0.9,
+                }}
+              >
+                <div
+                  className="client-num"
+                  style={{
+                    width: '24px',
+                    height: '12px',
+                    borderRadius: '6px',
+                    background: 'linear-gradient(90deg, #eef2f7 25%, #f7f9fc 37%, #eef2f7 63%)',
+                    backgroundSize: '400% 100%',
+                    animation: 'clientSkeletonShimmer 1.4s ease infinite',
+                    color: 'transparent',
+                  }}
+                >
+                  00
+                </div>
+                <div
+                  className="client-name"
+                  style={{
+                    width: `${40 + (i % 3) * 18}%`,
+                    minWidth: '140px',
+                    height: '14px',
+                    borderRadius: '7px',
+                    background: 'linear-gradient(90deg, #eef2f7 25%, #f7f9fc 37%, #eef2f7 63%)',
+                    backgroundSize: '400% 100%',
+                    animation: 'clientSkeletonShimmer 1.4s ease infinite',
+                    color: 'transparent',
+                  }}
+                >
+                  loading
+                </div>
+              </div>
+            ))
+          ) : clients.length === 0 ? (
             <div style={{ padding: '28px', textAlign: 'center', color: 'var(--text-3)', fontStyle: 'italic' }}>
               {lang === 'en' ? 'No clients yet. Add one to get started.' : 'Nog geen klanten. Voeg er een toe om te beginnen.'}
             </div>
@@ -1096,6 +1330,16 @@ export default function KlantenView() {
         </div>
       </div>
     </section>
+    <style>{`
+      @keyframes clientSkeletonShimmer {
+        0% {
+          background-position: 100% 50%;
+        }
+        100% {
+          background-position: 0 50%;
+        }
+      }
+    `}</style>
     {addModal}
     </>
   );

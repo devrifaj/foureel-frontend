@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useLang } from "../context/LangContext";
+import FormInput from "../components/FormInput";
 import PortalClientView from "./portal/PortalClientView";
 import PortalTeamView from "./portal/PortalTeamView";
 
@@ -96,30 +97,28 @@ export default function Portal() {
         <div className="login-sub">{subtitle}</div>
 
         <form onSubmit={doLogin}>
-          <div className="login-field">
-            <label htmlFor="login-email">{t("portalEmailLabel")}</label>
-            <input
-              id="login-email"
-              type="email"
-              placeholder={t("portalEmailPlaceholder")}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              required
-            />
-          </div>
-          <div className="login-field">
-            <label htmlFor="login-password">{t("portalPasswordLabel")}</label>
-            <input
-              id="login-password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </div>
+          <FormInput
+            className="login-field"
+            id="login-email"
+            type="email"
+            label={t("portalEmailLabel")}
+            placeholder={t("portalEmailPlaceholder")}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            required
+          />
+          <FormInput
+            className="login-field"
+            id="login-password"
+            type="password"
+            label={t("portalPasswordLabel")}
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
           {/* <button
             type="button"
             className="forgot-link"
