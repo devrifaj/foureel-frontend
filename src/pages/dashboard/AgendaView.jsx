@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getEvents, getClients, createEvent } from '../../api';
 
@@ -27,15 +27,29 @@ export default function AgendaView() {
     onSuccess: () => { qc.invalidateQueries(['events']); setAddModal(false); setForm({ name:'', type:'Shoot', date:'', client:'', notes:'' }); }
   });
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const active = Boolean(document.fullscreenElement);
+      setIsFs(active);
+      document.body.classList.toggle('agenda-fs', active);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    handleFullscreenChange();
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.body.classList.remove('agenda-fs');
+    };
+  }, []);
+
   const prev = () => { if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1); };
   const next = () => { if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1); };
   const toggleFs = async () => {
     if (!document.fullscreenElement) {
       await document.documentElement.requestFullscreen();
-      setIsFs(true);
     } else {
       await document.exitFullscreen();
-      setIsFs(false);
     }
   };
 
@@ -45,61 +59,83 @@ export default function AgendaView() {
   const dim = new Date(calYear, calMonth+1, 0).getDate();
   const todayStr = dStr(today);
 
+  const monthLabel = `${MONTHS[calMonth]} ${calYear}`;
+  const fsTodayLabel = today.toLocaleDateString('nl-NL', { weekday: 'short', day: '2-digit', month: 'short' });
+
   return (
-    <section className="view active">
-      <div className="page-header">
-        <div>
-          <div className="page-title">Agenda</div>
-          <div className="page-subtitle">{events.length} events gepland</div>
+    <section className="view active" id="view-agenda">
+      <div id="fs-topbar">
+        <div className="fs-brand">
+          <div style={{width:'32px',height:'32px',background:'var(--accent)',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="white"><path d="M3 3h5v5H3zm7 0h5v5h-5zm0 7h5v5h-5zM3 13l2.5-2.5L8 13l-2.5 2.5z"/></svg>
+          </div>
+          <div>
+            <div className="fs-brand-name">4REEL</div>
+            <div className="fs-date-pill">{fsTodayLabel}</div>
+          </div>
         </div>
-        <div style={{display:'flex',gap:'8px'}}>
-          <button className="btn btn-ghost" onClick={toggleFs}>{isFs ? '⤢ Verlaat fullscreen' : '⤢ Fullscreen'}</button>
-          <button className="btn btn-primary" onClick={() => setAddModal(true)}>+ Nieuw event</button>
+        <div className="fs-month">{monthLabel}</div>
+        <div className="fs-nav">
+          <button className="fs-nav-btn" onClick={prev} title="Vorige maand">←</button>
+          <button className="fs-nav-btn" onClick={next} title="Volgende maand">→</button>
+          <button className="fs-exit-btn" onClick={toggleFs}>
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"><path d="M1 1l12 12M13 1L1 13"/></svg>
+            Sluiten
+          </button>
         </div>
       </div>
 
-      {/* Month nav */}
-      <div style={{display:'flex',alignItems:'center',gap:'12px',marginBottom:'28px'}}>
+      <div id="fs-legend">
+        <span style={{fontSize:'11px',color:'var(--text-3)',fontWeight:'600',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:'4px'}}>Legenda</span>
+        <div className="legend-pill"><div className="legend-dot" style={{background:'var(--sage)'}}/>Shoot</div>
+        <div className="legend-pill"><div className="legend-dot" style={{background:'var(--amber)'}}/>Edit</div>
+        <div className="legend-pill"><div className="legend-dot" style={{background:'var(--orange)'}}/>Deadline</div>
+        <div className="legend-pill"><div className="legend-dot" style={{background:'var(--blue)'}}/>Call</div>
+        <div className="legend-pill"><div className="legend-dot" style={{background:'var(--purple)'}}/>Delivery</div>
+      </div>
+
+      <div className="page-header">
+        <div>
+          <div className="page-title">Agenda <em>— Studio planning</em></div>
+          <div className="page-subtitle">Shoots, edits, deadlines & calls</div>
+        </div>
+        <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
+          <button className="btn btn-primary" onClick={() => setAddModal(true)}>+ Event</button>
+          <button className="fs-btn" onClick={toggleFs} title="Presentatiemodus">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 6V1h5M10 1h5v5M15 10v5h-5M6 15H1v-5"/>
+            </svg>
+            <span>{isFs ? 'Sluiten' : 'Presentatie'}</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="agenda-controls">
         <button className="btn btn-ghost btn-sm" onClick={prev}>← Vorige</button>
-        <div className="page-title" style={{fontSize:'28px',minWidth:'220px'}}>{MONTHS[calMonth]} {calYear}</div>
+        <div className="month-display">{monthLabel}</div>
         <button className="btn btn-ghost btn-sm" onClick={next}>Volgende →</button>
       </div>
 
-      {/* Calendar grid */}
-      <div style={{background:'var(--card)',borderRadius:'var(--radius)',boxShadow:'var(--shadow)',overflow:'hidden'}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',background:'var(--bg-alt)',borderBottom:'1px solid var(--border)'}}>
-          {['Ma','Di','Wo','Do','Vr','Za','Zo'].map(d => (
-            <div key={d} style={{padding:'12px 0',textAlign:'center',fontSize:'10px',letterSpacing:'.1em',textTransform:'uppercase',color:'var(--text-3)',fontWeight:'500'}}>{d}</div>
+      <div className="calendar-grid">
+        <div className="cal-header">
+          {['Maandag','Dinsdag','Woensdag','Donderdag','Vrijdag','Zaterdag','Zondag'].map(d => (
+            <div key={d} className="cal-header-cell">{d}</div>
           ))}
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)'}}>
+        <div className="cal-body">
           {Array.from({length:blanks}).map((_,i) => (
-            <div key={`b${i}`} style={{borderRight:'1px solid var(--border)',borderBottom:'1px solid var(--border)',minHeight:'110px',background:'var(--bg)',opacity:.5}} />
+            <div key={`b${i}`} className="cal-cell empty" />
           ))}
           {Array.from({length:dim},(_,i)=>i+1).map(day => {
             const ds = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
             const dayEvs = events.filter(e => e.date === ds);
             const isT = ds === todayStr;
-            const col = (blanks+day-1)%7;
             return (
               <div key={day}
                 onClick={() => setDayModal({ date: ds, events: dayEvs })}
-                style={{
-                  borderRight: col===6 ? 'none' : '1px solid var(--border)',
-                  borderBottom: '1px solid var(--border)',
-                  minHeight: '110px',
-                  padding: '8px',
-                  cursor: 'pointer',
-                  background: isT ? 'var(--accent-pale)' : 'white',
-                  transition: 'background var(--transition)',
-                }}
-                onMouseEnter={e => { if(!isT) e.currentTarget.style.background='var(--bg-alt)'; }}
-                onMouseLeave={e => { if(!isT) e.currentTarget.style.background='white'; }}
+                className={`cal-cell${isT ? ' today' : ''}`}
               >
-                <div style={{
-                  fontFamily:'Montserrat', fontSize:'16px', fontWeight:'500', marginBottom:'4px',
-                  ...(isT ? {background:'var(--accent)',color:'white',width:'26px',height:'26px',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',fontWeight:'600'} : {color:'var(--text)'})
-                }}>{day}</div>
+                <div className="cal-day-num">{day}</div>
                 <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
                   {dayEvs.slice(0,3).map(e => (
                     <div key={e._id} className={`chip ${TYPE_CLS[e.type]||'chip-shoot'}`} style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</div>

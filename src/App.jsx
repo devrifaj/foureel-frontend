@@ -10,10 +10,18 @@ import TakenView from './pages/dashboard/TakenView';
 import ArchiefView from './pages/dashboard/ArchiefView';
 import WorkspaceView from './pages/dashboard/WorkspaceView';
 import PulseView from './pages/dashboard/PulseView';
+import VideoCheckerView from './pages/dashboard/VideoCheckerView';
 import Portal from './pages/Portal';
 import './styles/global.css';
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30000 } } });
+
+function TeamOnlyRoute({ user, children }) {
+  if (user?.role !== 'team') {
+    return <Navigate to="/portaal" replace />;
+  }
+  return children;
+}
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -43,7 +51,23 @@ function AppRoutes() {
         <Route path="klanten" element={<KlantenView />} />
         <Route path="taken" element={<TakenView />} />
         <Route path="archief" element={<ArchiefView />} />
-        <Route path="workspace" element={<WorkspaceView />} />
+        <Route
+          path="workspace"
+          element={(
+            <TeamOnlyRoute user={user}>
+              <WorkspaceView />
+            </TeamOnlyRoute>
+          )}
+        />
+        <Route
+          path="workspace/:batchId"
+          element={(
+            <TeamOnlyRoute user={user}>
+              <WorkspaceView />
+            </TeamOnlyRoute>
+          )}
+        />
+        <Route path="checker" element={<VideoCheckerView />} />
         <Route path="pulse" element={<PulseView />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

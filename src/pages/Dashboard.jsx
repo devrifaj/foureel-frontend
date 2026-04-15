@@ -56,6 +56,13 @@ const NavIcons = {
       <path d="M9 12h6M12 9v6" />
     </svg>
   ),
+  checker: (
+    <svg className="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
+      <rect x="2" y="2" width="12" height="9" rx="1.5" />
+      <path d="M6 14h4M8 11v3" />
+      <path d="M5 5h6M5 7.5h4" />
+    </svg>
+  ),
   pulse: (
     <svg className="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
       <path d="M1 8h2l2-5 2 10 2-7 2 4 2-2h2" />
@@ -85,6 +92,7 @@ const NAV_SECTIONS = [
     labelStyle: { marginTop: '4px' },
     items: [
       { id: 'workspace', iconKey: 'workspace', labelKey: 'workspace' },
+      { id: 'checker', iconKey: 'checker', labelKey: 'checker' },
       { id: 'pulse', iconKey: 'pulse', labelKey: 'pulse', pulseAccent: true },
     ],
   },
@@ -97,16 +105,24 @@ const NAV_TO = {
   taken: '/taken',
   archief: '/archief',
   workspace: '/workspace',
+  checker: '/checker',
   pulse: '/pulse',
 };
 
 export default function Dashboard() {
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const { lang, setLang, t } = useLang();
+  const isTeamUser = user?.role === 'team';
 
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks'], queryFn: getTasks });
   const openCount = tasks.filter((task) => task.column !== 'klaar').length;
+  const visibleSections = NAV_SECTIONS
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => (item.id === 'workspace' ? isTeamUser : true)),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <div className="dashboard-shell">
@@ -127,7 +143,7 @@ export default function Dashboard() {
         </div>
 
         <div className="sidebar-nav">
-          {NAV_SECTIONS.map((section) => (
+          {visibleSections.map((section) => (
             <div key={section.labelKey}>
               <div className="nav-section-label" style={section.labelStyle}>
                 {t(section.labelKey)}

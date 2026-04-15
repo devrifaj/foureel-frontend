@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DndContext, closestCenter, DragOverlay, useDroppable } from '@dnd-kit/core';
+import { DndContext, closestCenter, DragOverlay, useDroppable, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { getTasks, getClients, createTask, updateTask, archiveTask } from '../../api';
@@ -50,11 +50,34 @@ function TaskCard({ task, onClick }) {
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
       className={`task-card ${prioClass(task.priority)}${isDragging ? ' dragging' : ''}`}
       onClick={() => onClick(task)}
     >
+      <button
+        type="button"
+        aria-label="Sleep taak"
+        title="Sleep taak"
+        {...attributes}
+        {...listeners}
+        onClick={(e) => e.stopPropagation()}
+        className="btn btn-ghost btn-sm"
+        style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          minWidth: '24px',
+          height: '24px',
+          padding: 0,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'grab',
+          borderRadius: '6px',
+          zIndex: 2,
+        }}
+      >
+        ⋮⋮
+      </button>
       <TaskCardContent task={task} />
     </div>
   );
@@ -75,11 +98,24 @@ function KanbanColumn({ columnId, title, count, children }) {
 
 export default function TakenView() {
   const { t } = useLang();
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+  );
   const [filter, setFilter] = useState('all');
   const [activeId, setActiveId] = useState(null);
   const [taskModal, setTaskModal] = useState(null);
   const [newModal, setNewModal] = useState(false);
-  const [form, setForm] = useState({ title: '', assignee: 'Paolo', priority: 'Normal', dueDate: '', client: '', column: 'todo' });
+  const [toast, setToast] = useState(null);
+  const [form, setForm] = useState({
+    title: '',
+    assignee: 'Paolo',
+    priority: 'Normal',
+    dueDate: '',
+    clientId: '',
+    column: 'todo',
+  });
   const qc = useQueryClient();
 
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks'], queryFn: getTasks });
@@ -115,14 +151,39 @@ export default function TakenView() {
     onSuccess: () => {
       qc.invalidateQueries(['tasks']);
       setNewModal(false);
-      setForm({ title: '', assignee: 'Paolo', priority: 'Normal', dueDate: '', client: '', column: 'todo' });
+      setForm({
+        title: '',
+        assignee: 'Paolo',
+        priority: 'Normal',
+        dueDate: '',
+        clientId: '',
+        column: 'todo',
+      });
     },
   });
   const archiveMut = useMutation({
-    mutationFn: ({ id }) => archiveTask(id),
-    onSuccess: () => {
-      qc.invalidateQueries(['tasks']);
+    mutationFn: ({ id, archivedReason }) => archiveTask(id, archivedReason),
+    onMutate: async ({ id }) => {
+      await qc.cancelQueries({ queryKey: ['tasks'] });
+      const previousTasks = qc.getQueryData(['tasks']) || [];
+      qc.setQueryData(['tasks'], (current = []) =>
+        current.filter((task) => task._id !== id),
+      );
       setTaskModal(null);
+      setToast('Task archived');
+      return { previousTasks };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousTasks) {
+        qc.setQueryData(['tasks'], context.previousTasks);
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['archivedTasks'] });
+    },
+    onSettled: () => {
+      setTimeout(() => setToast(null), 1800);
     },
   });
 
@@ -184,6 +245,7 @@ export default function TakenView() {
       </div>
 
       <DndContext
+        sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={({ active }) => setActiveId(active.id)}
         onDragEnd={handleDragEnd}
@@ -270,12 +332,43 @@ export default function TakenView() {
               </div>
             </div>
             <div className="modal-footer">
-              <button type="button" className="btn btn-danger btn-sm" style={{ marginRight: 'auto' }} onClick={() => archiveMut.mutate({ id: taskModal._id })}>{t('archive')}</button>
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                style={{ marginRight: 'auto' }}
+                onClick={() =>
+                  archiveMut.mutate({
+                    id: taskModal._id,
+                    archivedReason: taskModal.column === 'klaar' ? 'completed' : 'manual',
+                  })
+                }
+              >
+                {t('archive')}
+              </button>
               <button type="button" className="btn btn-ghost" onClick={() => setTaskModal(null)}>{t('close')}</button>
             </div>
           </div>
         </div>
       )}
+
+      {toast ? (
+        <div
+          style={{
+            position: 'fixed',
+            right: '24px',
+            bottom: '24px',
+            background: 'var(--text)',
+            color: 'white',
+            borderRadius: '10px',
+            padding: '10px 14px',
+            fontSize: '12px',
+            zIndex: 1200,
+            boxShadow: 'var(--shadow)',
+          }}
+        >
+          {toast}
+        </div>
+      ) : null}
 
       {newModal && (
         <div className="modal-overlay open" onClick={() => setNewModal(false)}>
@@ -310,16 +403,38 @@ export default function TakenView() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Klant</label>
-                  <select className="form-input" value={form.client} onChange={(e) => setForm((f) => ({ ...f, client: e.target.value }))}>
+                  <select
+                    className="form-input"
+                    value={form.clientId}
+                    onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
+                  >
                     <option value="">— Kies klant —</option>
-                    {clients.map((c) => <option key={c._id}>{c.name}</option>)}
+                    {clients.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
             </div>
             <div className="modal-footer">
               <button type="button" className="btn btn-ghost" onClick={() => setNewModal(false)}>{t('cancel')}</button>
-              <button type="button" className="btn btn-primary" onClick={() => createMut.mutate(form)} disabled={!form.title}>Taak aanmaken</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  const selectedClient = clients.find((c) => String(c._id) === String(form.clientId));
+                  createMut.mutate({
+                    ...form,
+                    clientId: form.clientId || undefined,
+                    client: selectedClient?.name || '',
+                  });
+                }}
+                disabled={!form.title}
+              >
+                Taak aanmaken
+              </button>
             </div>
           </div>
         </div>
