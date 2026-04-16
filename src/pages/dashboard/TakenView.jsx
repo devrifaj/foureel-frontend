@@ -334,7 +334,7 @@ export default function TakenView() {
             <div className="modal-footer">
               <button
                 type="button"
-                className="btn btn-danger btn-sm"
+                 className="btn btn-ghost"
                 style={{ marginRight: 'auto' }}
                 onClick={() =>
                   archiveMut.mutate({
@@ -345,7 +345,7 @@ export default function TakenView() {
               >
                 {t('archive')}
               </button>
-              <button type="button" className="btn btn-ghost" onClick={() => setTaskModal(null)}>{t('close')}</button>
+              <button type="button" className="btn btn-primary" onClick={() => setTaskModal(null)}>{t('close')}</button>
             </div>
           </div>
         </div>
