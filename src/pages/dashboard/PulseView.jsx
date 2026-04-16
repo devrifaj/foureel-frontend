@@ -173,8 +173,8 @@ export default function PulseView() {
   const maxVal = Math.max(1, ...values);
 
   return (
-    <section className="view active">
-      <div className="page-header">
+    <section className="view active pulse-view">
+      <div className="page-header pulse-header">
         <div>
           <div className="page-title">Studio Pulse <em>— Bedrijfsgezondheid</em></div>
           <div className="page-subtitle">Live inzicht in workload, pipeline en groei</div>
@@ -182,11 +182,11 @@ export default function PulseView() {
         <button className="btn btn-ghost" onClick={refetch}>↺ Vernieuwen</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="pulse-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
         {kpis.map((k) => kpiCard(k.icon, k.label, k.value, k.sub, k.color))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div className="pulse-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div className="pulse-card">
           <div className="pulse-card-title">Video Pipeline</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
@@ -236,7 +236,7 @@ export default function PulseView() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div className="pulse-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div className="pulse-card">
           <div className="pulse-card-title">🔔 Slimme reminders</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
@@ -279,9 +279,9 @@ export default function PulseView() {
         </div>
       </div>
 
-      <div className="pulse-card" style={{ marginBottom: 16 }}>
+        <div className="pulse-card pulse-client-health" style={{ marginBottom: 16 }}>
         <div className="pulse-card-title">🏢 Klantgezondheid</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10, marginTop: 12 }}>
+        <div className="pulse-client-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10, marginTop: 12 }}>
           {clientHealth.map((c) => {
             const score = c.videos > 5 ? 'high' : c.videos > 0 ? 'mid' : 'low';
             const scoreCol = score === 'high' ? 'var(--sage)' : score === 'mid' ? 'var(--amber)' : '#E05050';
@@ -309,7 +309,7 @@ export default function PulseView() {
       </div>
 
       {workloadPct < 50 ? (
-        <div style={{ background: 'linear-gradient(135deg,var(--sidebar),#3D2E26)', borderRadius: 'var(--radius)', padding: '20px 28px', display: 'flex', alignItems: 'center', gap: 20, marginBottom: 8 }}>
+        <div className="pulse-capacity-banner" style={{ background: 'linear-gradient(135deg,var(--sidebar),#3D2E26)', borderRadius: 'var(--radius)', padding: '20px 28px', display: 'flex', alignItems: 'center', gap: 20, marginBottom: 8 }}>
           <div style={{ fontSize: 36 }}>🚀</div>
           <div>
             <div style={{ fontFamily: 'Montserrat, sans-serif', fontSize: 18, fontWeight: 700, color: '#FAF7F2', marginBottom: 4 }}>
@@ -320,7 +320,7 @@ export default function PulseView() {
             </div>
           </div>
           <button
-            className="btn"
+            className="btn pulse-capacity-btn"
             style={{ marginLeft: 'auto', background: 'var(--accent)', color: 'white', border: 'none', flexShrink: 0, whiteSpace: 'nowrap' }}
             onClick={() => navigate('/klanten')}
           >

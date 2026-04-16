@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DndContext, closestCenter, DragOverlay, useDroppable, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, closestCenter, DragOverlay, useDroppable, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { getTasks, getClients, createTask, updateTask, archiveTask } from '../../api';
@@ -60,21 +60,7 @@ function TaskCard({ task, onClick }) {
         {...attributes}
         {...listeners}
         onClick={(e) => e.stopPropagation()}
-        className="btn btn-ghost btn-sm"
-        style={{
-          position: 'absolute',
-          top: '8px',
-          right: '8px',
-          minWidth: '24px',
-          height: '24px',
-          padding: 0,
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'grab',
-          borderRadius: '6px',
-          zIndex: 2,
-        }}
+        className="btn btn-ghost btn-sm task-drag-handle"
       >
         ⋮⋮
       </button>
@@ -99,12 +85,16 @@ function KanbanColumn({ columnId, title, count, children }) {
 export default function TakenView() {
   const { t } = useLang();
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: { distance: 6 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 120, tolerance: 8 },
     }),
   );
   const [filter, setFilter] = useState('all');
   const [activeId, setActiveId] = useState(null);
+  const [scrollProgress, setScrollProgress] = useState(0);
   const [taskModal, setTaskModal] = useState(null);
   const [newModal, setNewModal] = useState(false);
   const [toast, setToast] = useState(null);
@@ -117,6 +107,7 @@ export default function TakenView() {
     column: 'todo',
   });
   const qc = useQueryClient();
+  const boardRef = useRef(null);
 
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks'], queryFn: getTasks });
   const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: getClients });
@@ -213,14 +204,45 @@ export default function TakenView() {
 
   const filters = [{ id: 'all', lbl: t('allTasks') }, ...TEAM.map((n) => ({ id: n, lbl: n }))];
 
+  useEffect(() => {
+    const boardEl = boardRef.current;
+    if (!boardEl) return undefined;
+
+    const updateProgress = () => {
+      if (window.innerWidth > 900) return;
+      const maxScroll = Math.max(1, boardEl.scrollWidth - boardEl.clientWidth);
+      const nextProgress = Math.max(0, Math.min(1, boardEl.scrollLeft / maxScroll));
+      setScrollProgress(nextProgress);
+    };
+
+    const onScroll = () => window.requestAnimationFrame(updateProgress);
+    boardEl.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', updateProgress);
+    updateProgress();
+
+    return () => {
+      boardEl.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', updateProgress);
+    };
+  }, [filter, filtered.length]);
+
+  const scrollToColumn = (idx) => {
+    const boardEl = boardRef.current;
+    if (!boardEl) return;
+    const columns = boardEl.querySelectorAll('.kanban-col');
+    const target = columns[idx];
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+  };
+
   return (
-    <section className="view active">
-      <div className="page-header">
-        <div>
+    <section className="view active taken-view">
+      <div className="page-header taken-page-header">
+        <div className="taken-page-title-wrap">
           <div className="page-title">Taken <em>— Kanban board</em></div>
           <div className="page-subtitle">{t('tasksKanbanSubtitle')}</div>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setNewModal(true)}>{t('addTask')}</button>
+        <button type="button" className="btn btn-primary taken-add-btn" onClick={() => setNewModal(true)}>{t('addTask')}</button>
       </div>
 
       <div className="kanban-header">
@@ -243,7 +265,6 @@ export default function TakenView() {
           ))}
         </div>
       </div>
-
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -251,7 +272,7 @@ export default function TakenView() {
         onDragEnd={handleDragEnd}
         onDragCancel={() => setActiveId(null)}
       >
-        <div className="kanban-board">
+        <div className="kanban-board" ref={boardRef}>
           {COLS.map((col) => {
             const colTasks = filtered.filter((x) => x.column === col.id);
             return (
@@ -283,6 +304,25 @@ export default function TakenView() {
           ) : null}
         </DragOverlay>
       </DndContext>
+      <div
+        className="kanban-mobile-fab-indicator"
+        aria-label="Kolom navigator"
+        style={{ '--fab-count': COLS.length }}
+      >
+        <span
+          className="kanban-mobile-fab-thumb"
+          style={{ transform: `translateX(calc(${scrollProgress} * var(--fab-track-x)))` }}
+        />
+        {COLS.map((col, idx) => (
+          <button
+            key={col.id}
+            type="button"
+            className="kanban-mobile-fab-dot"
+            aria-label={`Ga naar ${t(col.id)}`}
+            onClick={() => scrollToColumn(idx)}
+          />
+        ))}
+      </div>
 
       {taskModal && (
         <div className="modal-overlay open" onClick={() => setTaskModal(null)}>

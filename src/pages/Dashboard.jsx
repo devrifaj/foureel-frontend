@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Outlet, NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
@@ -111,8 +111,10 @@ const NAV_TO = {
 
 export default function Dashboard() {
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { logout, user } = useAuth();
   const { lang, setLang, t } = useLang();
+  const location = useLocation();
   const isTeamUser = user?.role === 'team';
 
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks'], queryFn: getTasks });
@@ -124,9 +126,47 @@ export default function Dashboard() {
     }))
     .filter((section) => section.items.length > 0);
 
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
   return (
     <div className="dashboard-shell">
-      <nav id="sidebar" aria-label="Studio navigatie">
+      <header className="mobile-topbar">
+        <div className="mobile-topbar-brand">
+          <div className="brand-mark">
+            <svg viewBox="0 0 18 18" aria-hidden>
+              <path
+                fill="white"
+                d="M3 3h5v5H3zm7 0h5v5h-5zm0 7h5v5h-5zM3 13l2.5-2.5L8 13l-2.5 2.5z"
+              />
+            </svg>
+          </div>
+          <span className="brand-name">4REEL</span>
+        </div>
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={sidebarOpen}
+          aria-controls="sidebar"
+          onClick={() => setSidebarOpen((prev) => !prev)}
+        >
+          {sidebarOpen ? '✕' : '☰'}
+        </button>
+      </header>
+
+      {sidebarOpen ? <button type="button" className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} /> : null}
+
+      <nav id="sidebar" className={sidebarOpen ? 'open' : ''} aria-label="Studio navigatie">
+        <button
+          type="button"
+          className="sidebar-close-btn"
+          aria-label="Close sidebar"
+          onClick={() => setSidebarOpen(false)}
+        >
+          ✕
+        </button>
         <div className="sidebar-brand">
           <div className="brand-logo">
             <div className="brand-mark">
@@ -153,6 +193,7 @@ export default function Dashboard() {
                   key={item.id}
                   to={NAV_TO[item.id]}
                   end={item.id === 'home'}
+                  onClick={() => setSidebarOpen(false)}
                   className={({ isActive }) =>
                     `nav-item${isActive ? ' active' : ''}${item.pulseAccent ? ' nav-item--pulse' : ''}`
                   }

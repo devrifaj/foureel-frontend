@@ -162,8 +162,8 @@ export function ArchiefView() {
           <option value="az">Titel A-Z</option>
           <option value="za">Titel Z-A</option>
         </select>
-        <div style={{ marginLeft: 'auto' }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => { setFolder(null); resetFilters(); }}>↺ Reset filters</button>
+        <div className="archive-reset-wrap" style={{ marginLeft: 'auto' }}>
+          <button className="btn btn-ghost btn-sm archive-reset-btn" onClick={() => { setFolder(null); resetFilters(); }}>↺ Reset filters</button>
         </div>
       </div>
 
@@ -183,7 +183,7 @@ export function ArchiefView() {
 
         <div className="archive-content">
           <div className="archive-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="archive-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h3>{folder ? clientNameById[String(folder)] || 'Client' : 'Alle taken'}</h3>
               {activeFilters > 0 && (
                 <span style={{ fontSize: '11px', background: 'var(--accent-pale)', color: 'var(--accent)', padding: '2px 8px', borderRadius: '20px', fontWeight: '500' }}>
@@ -191,7 +191,7 @@ export function ArchiefView() {
                 </span>
               )}
             </div>
-            <span style={{ fontSize: '12px', color: 'var(--text-3)' }}>{filtered.length} van {totalInFolder} taken</span>
+            <span className="archive-header-count" style={{ fontSize: '12px', color: 'var(--text-3)' }}>{filtered.length} van {totalInFolder} taken</span>
           </div>
 
           {filtered.length === 0 ? (
@@ -219,7 +219,7 @@ export function ArchiefView() {
                       </span>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="archived-task-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className={`archive-reason-tag ${REASON_CLASS[reasonKey] || 'ar-completed'}`}>{REASON_LABEL[reasonKey] || 'Afgerond'}</span>
                     <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>→</span>
                   </div>
@@ -232,10 +232,10 @@ export function ArchiefView() {
 
       {modal && (
         <div className="modal-overlay open" onClick={() => setModal(null)}>
-          <div className="modal" style={{ maxWidth: '560px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal archive-modal" style={{ maxWidth: '560px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header"><div className="modal-title">{modal.title}</div><button className="modal-close" onClick={() => setModal(null)}>✕</button></div>
             <div className="modal-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+              <div className="archive-modal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
                 {[['Klant', clientNameById[String(modal.clientId)] || modal.client || '—'], ['Toegewezen', modal.assignee || '—'], ['Gearchiveerd', modal.archivedAt ? new Date(modal.archivedAt).toLocaleDateString('nl-NL') : '—'], ['Reden', REASON_LABEL[modal.archivedReason || 'manual'] || 'Handmatig']].map(([l, v]) => (
                   <div key={l} style={{ background: 'var(--bg-alt)', borderRadius: '8px', padding: '10px 12px' }}>
                     <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '3px' }}>{l}</div>
@@ -277,6 +277,7 @@ export function ArchiefView() {
       )}
       {toast ? (
         <div
+          className="archive-toast"
           style={{
             position: 'fixed',
             right: '24px',

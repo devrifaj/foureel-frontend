@@ -523,7 +523,10 @@ export default function WorkspaceView() {
               >
                 ← Alle batches
               </button>
-              <span style={{fontSize:'13px',color:'var(--text-3)'}} id="ws-crumb"></span>
+              <span
+                style={{ fontSize: "13px", color: "var(--text-3)" }}
+                id="ws-crumb"
+              ></span>
               <span className="ws-detail-chip">👤 {batch.client || "—"}</span>
               <span className="ws-detail-chip ws-detail-chip-current">
                 📁 {batch.name}
@@ -532,7 +535,7 @@ export default function WorkspaceView() {
             <div className="ws-detail-actions">
               <button
                 className="btn btn-ghost btn-sm"
-                style={{color:'#c04040',borderColor:'#e8c8c8'}}
+                style={{ color: "#c04040", borderColor: "#e8c8c8" }}
                 onClick={() => {
                   if (window.confirm(`"${batch.name}" verwijderen?`)) {
                     deleteBatchMut.mutate(batch._id, {
@@ -553,6 +556,7 @@ export default function WorkspaceView() {
           </div>
 
           <div
+            className="ws-detail-card"
             style={{
               background: "var(--card)",
               borderRadius: "var(--radius)",
@@ -562,6 +566,7 @@ export default function WorkspaceView() {
             }}
           >
             <div
+              className="ws-detail-hero"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -572,6 +577,7 @@ export default function WorkspaceView() {
               <div style={{ fontSize: "26px" }}>{batch.emoji || "🎬"}</div>
               <div>
                 <div
+                  className="ws-detail-hero-title"
                   style={{
                     fontFamily: "Montserrat",
                     fontSize: "34px",
@@ -587,6 +593,7 @@ export default function WorkspaceView() {
               </div>
             </div>
             <div
+              className="ws-prop-grid"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(6,minmax(0,1fr))",
@@ -675,6 +682,7 @@ export default function WorkspaceView() {
           </div>
 
           <div
+            className="ws-detail-card"
             style={{
               background: "var(--card)",
               borderRadius: "var(--radius)",
@@ -755,7 +763,7 @@ export default function WorkspaceView() {
                 </button>
               </div>
             ))}
-            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+            <div className="ws-link-add-row" style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
               <input
                 className="form-input"
                 style={{ maxWidth: "220px" }}
@@ -783,6 +791,7 @@ export default function WorkspaceView() {
           </div>
 
           <div
+            className="ws-detail-card"
             style={{
               background: "var(--card)",
               borderRadius: "var(--radius)",
@@ -797,6 +806,7 @@ export default function WorkspaceView() {
             <div>
               {workflowSteps.map((s, i) => (
                 <div
+                  className="ws-workflow-step"
                   key={s.n}
                   style={{
                     display: "flex",
@@ -853,6 +863,7 @@ export default function WorkspaceView() {
           </div>
 
           <div
+            className="ws-detail-card"
             style={{
               background: "var(--card)",
               borderRadius: "var(--radius)",
@@ -861,6 +872,7 @@ export default function WorkspaceView() {
             }}
           >
             <div
+              className="ws-videos-head"
               style={{
                 padding: "14px 20px",
                 borderBottom: "1px solid var(--border)",
@@ -882,6 +894,7 @@ export default function WorkspaceView() {
                 Filmpjes in batch ({total})
               </div>
               <div
+                className="ws-videos-head-right"
                 style={{ display: "flex", alignItems: "center", gap: "8px" }}
               >
                 <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
@@ -1187,6 +1200,7 @@ export default function WorkspaceView() {
           </div>
 
           <div
+            className="ws-detail-card"
             style={{
               background: "var(--card)",
               borderRadius: "var(--radius)",
@@ -1231,6 +1245,7 @@ export default function WorkspaceView() {
               ))}
 
               <div
+                className="ws-res-add-row"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1.2fr 1fr auto",
@@ -1321,7 +1336,7 @@ export default function WorkspaceView() {
   return (
     <>
       <section className="view active">
-        <div className="page-header">
+        <div className="page-header ws-page-header">
           <div>
             <div className="page-title">
               Workspace <em>— Editors</em>

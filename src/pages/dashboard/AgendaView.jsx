@@ -99,7 +99,7 @@ export default function AgendaView() {
           <div className="page-title">Agenda <em>— Studio planning</em></div>
           <div className="page-subtitle">Shoots, edits, deadlines & calls</div>
         </div>
-        <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
+        <div className="agenda-header-actions">
           <button className="btn btn-primary" onClick={() => setAddModal(true)}>+ Event</button>
           <button className="fs-btn" onClick={toggleFs} title="Presentatiemodus">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

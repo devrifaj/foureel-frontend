@@ -67,7 +67,7 @@ function Questionnaire({ clientName, onSubmit }) {
   const pct = Math.min(100, Math.round(filled/15*100));
 
   if (submitted) return (
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--bg)',padding:'40px'}}>
+    <div className="portal-questionnaire-success" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--bg)',padding:'40px'}}>
       <div style={{fontSize:'64px',marginBottom:'20px'}}>🎉</div>
       <div style={{fontFamily:'Montserrat',fontSize:'28px',fontWeight:'700',marginBottom:'12px'}}>Vragenlijst ontvangen!</div>
       <div style={{fontSize:'15px',color:'var(--text-3)',textAlign:'center',maxWidth:'440px',marginBottom:'32px',lineHeight:'1.6'}}>Bedankt voor het invullen. Het 4REEL team gaat hiermee aan de slag en neemt snel contact met je op.</div>
@@ -76,24 +76,24 @@ function Questionnaire({ clientName, onSubmit }) {
   );
 
   return (
-    <div style={{minHeight:'100vh',background:'var(--bg)'}}>
+    <div className="portal-questionnaire" style={{minHeight:'100vh',background:'var(--bg)'}}>
       {/* Header */}
-      <div style={{background:'var(--sidebar)',padding:'20px 32px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+      <div className="portal-questionnaire-header" style={{background:'var(--sidebar)',padding:'20px 32px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div>
           <div style={{fontFamily:'Montserrat',fontSize:'20px',fontWeight:'700',color:'white',letterSpacing:'.12em'}}>4REEL — Onboarding</div>
           <div style={{fontSize:'12px',color:'rgba(255,255,255,.5)',marginTop:'2px'}}>{clientName}</div>
         </div>
-        <div style={{textAlign:'right'}}>
+        <div className="portal-questionnaire-progress" style={{textAlign:'right'}}>
           <div style={{fontSize:'12px',color:'rgba(255,255,255,.6)',marginBottom:'4px'}}>{pct}%</div>
-          <div style={{width:'180px',height:'4px',background:'rgba(255,255,255,.15)',borderRadius:'2px'}}>
+          <div className="portal-questionnaire-progress-bar" style={{width:'180px',height:'4px',background:'rgba(255,255,255,.15)',borderRadius:'2px'}}>
             <div style={{height:'100%',background:'var(--accent)',borderRadius:'2px',width:`${pct}%`,transition:'width .4s'}}/>
           </div>
         </div>
       </div>
 
-      <div style={{maxWidth:'720px',margin:'0 auto',padding:'40px 24px 100px'}}>
+      <div className="portal-questionnaire-content" style={{maxWidth:'720px',margin:'0 auto',padding:'40px 24px 100px'}}>
         {/* Banner */}
-        <div style={{background:'linear-gradient(135deg,var(--accent),#E07830)',borderRadius:'14px',padding:'20px 24px',marginBottom:'28px',display:'flex',gap:'16px',alignItems:'center'}}>
+        <div className="portal-questionnaire-banner" style={{background:'linear-gradient(135deg,var(--accent),#E07830)',borderRadius:'14px',padding:'20px 24px',marginBottom:'28px',display:'flex',gap:'16px',alignItems:'center'}}>
           <div style={{fontSize:'28px',flexShrink:0}}>👋</div>
           <div>
             <div style={{fontFamily:'Montserrat',fontSize:'15px',fontWeight:'700',color:'white',marginBottom:'3px'}}>Welkom bij 4REEL! Vul de onboarding in</div>
@@ -103,11 +103,11 @@ function Questionnaire({ clientName, onSubmit }) {
 
         {Q_TOPICS.map(topic => (
           <div key={topic.num} style={{background:'var(--card)',borderRadius:'16px',boxShadow:'0 2px 16px rgba(28,20,16,.07)',marginBottom:'28px',overflow:'hidden'}}>
-            <div style={{background:'var(--sidebar)',padding:'20px 28px',display:'flex',alignItems:'center',gap:'14px'}}>
+            <div className="portal-questionnaire-topic-head" style={{background:'var(--sidebar)',padding:'20px 28px',display:'flex',alignItems:'center',gap:'14px'}}>
               <div style={{width:'36px',height:'36px',borderRadius:'50%',background:'var(--accent)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Montserrat',fontSize:'16px',fontWeight:'700',color:'white',flexShrink:0}}>{topic.num}</div>
               <div style={{fontFamily:'Montserrat',fontSize:'16px',fontWeight:'600',color:'white'}}>{topic.title}</div>
             </div>
-            <div style={{padding:'24px 28px',display:'flex',flexDirection:'column',gap:'22px'}}>
+            <div className="portal-questionnaire-topic-body" style={{padding:'24px 28px',display:'flex',flexDirection:'column',gap:'22px'}}>
               {topic.fields.map(field => (
                 <div key={field.key}>
                   <div style={{fontSize:'13px',fontWeight:'600',color:'var(--text)',marginBottom:'8px',lineHeight:'1.5'}}>
@@ -165,9 +165,9 @@ function Questionnaire({ clientName, onSubmit }) {
       </div>
 
       {/* Footer */}
-      <div style={{position:'fixed',bottom:0,left:0,right:0,background:'white',borderTop:'2px solid var(--border)',padding:'16px 32px',display:'flex',alignItems:'center',justifyContent:'space-between',zIndex:100,boxShadow:'0 -4px 20px rgba(28,20,16,.08)'}}>
+      <div className="portal-questionnaire-footer" style={{position:'fixed',bottom:0,left:0,right:0,background:'white',borderTop:'2px solid var(--border)',padding:'16px 32px',display:'flex',alignItems:'center',justifyContent:'space-between',zIndex:100,boxShadow:'0 -4px 20px rgba(28,20,16,.08)'}}>
         <div style={{fontSize:'12px',color:'var(--sage)',fontWeight:'600'}}>✓ Automatisch opgeslagen</div>
-        <button onClick={async()=>{await saveMut.mutateAsync({a:answers,s:true});setSubmitted(true);}}
+        <button className="portal-questionnaire-submit-btn" onClick={async()=>{await saveMut.mutateAsync({a:answers,s:true});setSubmitted(true);}}
           style={{background:'var(--accent)',color:'white',border:'none',borderRadius:'10px',padding:'14px 32px',fontFamily:'Montserrat',fontSize:'15px',fontWeight:'700',cursor:'pointer'}}>
           Vragenlijst versturen →
         </button>
@@ -228,7 +228,7 @@ export default function PortalClientView() {
         <div className="portal-header-logo"><span>4REEL</span> Portaal</div>
         <div className="portal-header-client">
           <div className="portal-header-avatar" style={{background:client.color||'var(--accent)'}}>{initials}</div>
-          <span>{client.name}</span>
+          <span className="portal-header-client-name">{client.name}</span>
           {!data?.questionnaire?.submitted && (
             <button onClick={()=>setShowQuestionnaire(true)}
               style={{background:'var(--accent)',color:'white',border:'none',borderRadius:'7px',padding:'6px 12px',fontSize:'12px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit'}}>

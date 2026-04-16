@@ -213,8 +213,8 @@ export default function VideoCheckerView() {
   };
 
   return (
-    <section className="view active">
-      <div className="page-header">
+    <section className="view active vc-view">
+      <div className="page-header vc-page-header">
         <div>
           <div className="page-title">
             Video Checker <em>— Spelling & Tekst</em>

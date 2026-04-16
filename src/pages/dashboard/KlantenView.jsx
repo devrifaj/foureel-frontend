@@ -114,10 +114,11 @@ function RetainerTab({ client, onSave }) {
   return (
     <div>
       <div
+        className="retainer-status-banner"
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
+          gap: '8px',
           padding: '14px 18px',
           borderRadius: '10px',
           marginBottom: '20px',
@@ -137,6 +138,7 @@ function RetainerTab({ client, onSave }) {
           )}
         </div>
         <select
+          className="retainer-status-select"
           value={r.status || 'concept'}
           onChange={(e) => save('status', e.target.value)}
           style={{
@@ -156,7 +158,14 @@ function RetainerTab({ client, onSave }) {
           ))}
         </select>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '16px',
+          marginBottom: '16px',
+        }}
+      >
         {field('pakket', '📦 Pakketnaam', 'bijv. Social Media Retainer M')}
         {field('prijs', '💰 Prijs', 'bijv. € 1.450')}
         {field('periode', '🔁 Betalingsperiode', 'bijv. Maandelijks')}
@@ -186,7 +195,7 @@ function RetainerTab({ client, onSave }) {
         >
           🎬 Deliverables
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
           {field('shoots', '📷 Shoots', 'bijv. 2 shoots/maand')}
           {field('videos', '🎬 Videos', 'bijv. 8 reels/maand')}
         </div>
@@ -237,6 +246,7 @@ function RetainerTab({ client, onSave }) {
           background: 'var(--bg-alt)',
           borderRadius: '8px',
           border: '1px solid var(--border)',
+          flexWrap: 'wrap',
         }}
       >
         <span style={{ fontSize: '16px' }}>🌐</span>
@@ -306,7 +316,7 @@ function PortaalTab({ client }) {
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '12px', marginBottom: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '20px' }}>
         {[
           [clientMsgs.length, 'Berichten van klant', 'var(--accent)'],
           [reviewVideos.length, 'In review', 'var(--blue)'],
@@ -400,6 +410,8 @@ function PortaalTab({ client }) {
                   borderRadius: '8px',
                   border: '1px solid var(--border)',
                   marginBottom: '6px',
+                  gap: '8px',
+                  flexWrap: 'wrap',
                 }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -498,7 +510,7 @@ function PortaalTab({ client }) {
             ))
           )}
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <textarea
             value={reply}
             onChange={(e) => setReply(e.target.value)}
@@ -522,7 +534,12 @@ function PortaalTab({ client }) {
               boxSizing: 'border-box',
             }}
           />
-          <button type="button" className="btn btn-primary" onClick={submitReply} disabled={!reply.trim() || sendMut.isPending}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={submitReply}
+            disabled={!reply.trim() || sendMut.isPending}
+          >
             Stuur
           </button>
         </div>
@@ -603,7 +620,7 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
             ✕
           </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
             <label className="form-label">{lang === 'en' ? 'Company name' : 'Bedrijfsnaam'}</label>
             <input
@@ -1049,11 +1066,21 @@ export default function KlantenView() {
       <>
         <section className="view active" id="view-klanten">
         <div className="client-detail active">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: deleteError ? '10px' : '20px' }}>
+          <div
+            className="klanten-detail-toolbar"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: deleteError ? '10px' : '20px',
+              gap: '10px',
+              flexWrap: 'wrap',
+            }}
+          >
             <button type="button" className="btn btn-ghost btn-sm" onClick={backToList}>
               ← {lang === 'en' ? 'Back to overview' : 'Terug naar overzicht'}
             </button>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div className="klanten-detail-toolbar-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
@@ -1102,7 +1129,7 @@ export default function KlantenView() {
                 )}
               </div>
             </div>
-            <div className="tabs" style={{ marginBottom: '24px' }}>
+            <div className="tabs klanten-tabs" style={{ marginBottom: '24px' }}>
               {TABS.map((tb) => (
                 <button
                   key={tb.id}
@@ -1159,7 +1186,16 @@ export default function KlantenView() {
             {tab === 'retainer' && <RetainerTab client={c} onSave={saveClient} />}
             {tab === 'contacten' && (
               <div style={{ padding: '12px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    padding: '14px 0',
+                    borderBottom: '1px solid var(--border)',
+                    flexWrap: 'wrap',
+                  }}
+                >
                   <div
                     style={{
                       width: '40px',
