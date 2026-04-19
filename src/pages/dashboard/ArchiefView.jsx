@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getArchivedTasks, getClients, restoreTask } from '../../api';
+import { useLang } from '../../context/LangContext';
 
 const ASSIGNEE = {
   Paolo: { bg: 'var(--accent)', init: 'P' },
@@ -10,11 +11,16 @@ const ASSIGNEE = {
   Boy: { bg: 'var(--purple)', init: 'B' },
 };
 
-const REASON_LABEL = {
-  delivered: 'Opgeleverd',
-  completed: 'Afgerond',
-  manual: 'Handmatig',
+const REASON_TKEY = {
+  delivered: 'archiveReasonDelivered',
+  completed: 'archiveReasonCompleted',
+  manual: 'archiveReasonManual',
 };
+
+function archiveReasonLabel(t, reasonKey) {
+  const key = REASON_TKEY[reasonKey] || REASON_TKEY.completed;
+  return t(key);
+}
 
 const REASON_CLASS = {
   delivered: 'ar-delivered',
@@ -30,13 +36,31 @@ function monthKey(dateString) {
   return `${d.getFullYear()}-${m}`;
 }
 
-function formatMonthLabel(key) {
+function formatMonthLabel(key, locale) {
   const [year, month] = key.split('-');
   const date = new Date(Number(year), Number(month) - 1, 1);
-  return date.toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' });
+  return date.toLocaleDateString(locale === 'en' ? 'en-US' : 'nl-NL', { month: 'long', year: 'numeric' });
 }
 
-export function ArchiefView() {
+function dateLocale(lang) {
+  return lang === 'en' ? 'en-US' : 'nl-NL';
+}
+
+function normalizeClientName(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+/** Match tasks to a client row: by id first, then by display name (legacy tasks often lack clientId). */
+function taskMatchesClient(task, clientRow) {
+  if (clientRow == null || clientRow.id == null) return true;
+  if (task.clientId != null && String(task.clientId) === String(clientRow.id)) return true;
+  const rowName = normalizeClientName(clientRow.name);
+  if (!rowName) return false;
+  return normalizeClientName(task.client) === rowName;
+}
+
+const ArchiefView = () => {
+  const { t, lang } = useLang();
   const [folder, setFolder] = useState(null);
   const [search, setSearch] = useState('');
   const [month, setMonth] = useState('all');
@@ -48,21 +72,26 @@ export function ArchiefView() {
   const qc = useQueryClient();
 
   const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: getClients });
-  const { data: tasks = [] } = useQuery({
-    queryKey: ['archivedTasks', folder],
-    queryFn: () => getArchivedTasks(folder || undefined),
-  });
   const { data: allArchivedTasks = [] } = useQuery({
-    queryKey: ['archivedTasks', 'all'],
+    queryKey: ['archivedTasks'],
     queryFn: () => getArchivedTasks(),
   });
+
+  const folderTasks = useMemo(() => {
+    if (folder == null) return allArchivedTasks;
+    const client = clients.find((c) => String(c._id) === String(folder));
+    const row = client ? { id: client._id, name: client.name } : { id: folder, name: null };
+    return allArchivedTasks.filter((t) => taskMatchesClient(t, row));
+  }, [allArchivedTasks, folder, clients]);
+
+  const tasks = folderTasks;
   const restoreMut = useMutation({
     mutationFn: restoreTask,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['archivedTasks'] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
       setModal(null);
-      setToast('Task restored');
+      setToast(t('taskRestoredToast'));
       setTimeout(() => setToast(null), 1800);
     },
   });
@@ -127,106 +156,131 @@ export function ArchiefView() {
   return (
     <section className="view active">
       <div className="page-header">
-        <div><div className="page-title">Archief <em>— Afgeronde taken</em></div><div className="page-subtitle">{tasks.length} gearchiveerde taken</div></div>
-      </div>
-
-      <div className="archive-controls">
-        <input
-          className="search-input"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Zoeken..."
-          style={{ maxWidth: '220px' }}
-        />
-        <select className="btn btn-ghost btn-sm" value={month} onChange={(e) => setMonth(e.target.value)}>
-          <option value="all">Alle maanden</option>
-          {monthOptions.map((m) => (
-            <option key={m} value={m}>{formatMonthLabel(m)}</option>
-          ))}
-        </select>
-        <select className="btn btn-ghost btn-sm" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-          <option value="all">Iedereen</option>
-          {assigneeOptions.map((name) => (
-            <option key={name} value={name}>{name}</option>
-          ))}
-        </select>
-        <select className="btn btn-ghost btn-sm" value={reason} onChange={(e) => setReason(e.target.value)}>
-          <option value="all">Alle redenen</option>
-          <option value="completed">Afgerond</option>
-          <option value="delivered">Opgeleverd</option>
-          <option value="manual">Handmatig</option>
-        </select>
-        <select className="btn btn-ghost btn-sm" value={sort} onChange={(e) => setSort(e.target.value)}>
-          <option value="newest">Nieuwste eerst</option>
-          <option value="oldest">Oudste eerst</option>
-          <option value="az">Titel A-Z</option>
-          <option value="za">Titel Z-A</option>
-        </select>
-        <div className="archive-reset-wrap" style={{ marginLeft: 'auto' }}>
-          <button className="btn btn-ghost btn-sm archive-reset-btn" onClick={() => { setFolder(null); resetFilters(); }}>↺ Reset filters</button>
+        <div>
+          <div className="page-title">
+            {t('archivePageTitle')} <em>{t('archivePageTitleEm')}</em>
+          </div>
+          <div className="page-subtitle">
+            {tasks.length} {t('archiveArchivedTasksSuffix')}
+          </div>
         </div>
       </div>
 
       <div className="archive-layout">
         <div className="folder-list">
-          {[{ name: 'Alle taken', id: null }, ...clients.map((c) => ({ name: c.name, id: c._id }))].map((f) => (
+          {[{ name: t('archiveAllTasks'), id: null }, ...clients.map((c) => ({ name: c.name, id: c._id }))].map((f) => (
             <div key={f.name} onClick={() => setFolder(f.id)} className={`folder-item${folder === f.id ? ' active' : ''}`}>
               <span className="folder-icon">{f.id ? '📂' : '📁'}</span> {f.name}
               <span className="folder-count">
-                {f.id
-                  ? allArchivedTasks.filter((task) => String(task.clientId) === String(f.id)).length
+                {f.id != null
+                  ? allArchivedTasks.filter((task) => taskMatchesClient(task, f)).length
                   : allArchivedTasks.length}
               </span>
             </div>
           ))}
         </div>
 
-        <div className="archive-content">
+        <div className="archive-main">
+          <div className="archive-controls-wrap">
+            <div className="archive-controls">
+              <input
+                className="search-input"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t('archiveSearchPlaceholder')}
+                style={{ maxWidth: '200px', flex: 1, minWidth: '140px' }}
+              />
+              <div className="archive-control-group">
+                <span className="archive-control-label">{t('archiveMonth')}</span>
+                <select className="form-select archive-select" value={month} onChange={(e) => setMonth(e.target.value)}>
+                  <option value="all">{t('archiveAllMonths')}</option>
+                  {monthOptions.map((m) => (
+                    <option key={m} value={m}>{formatMonthLabel(m, lang)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="archive-control-group">
+                <span className="archive-control-label">{t('archivePerson')}</span>
+                <select className="form-select archive-select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+                  <option value="all">{t('archiveEveryone')}</option>
+                  {assigneeOptions.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="archive-control-group">
+                <span className="archive-control-label">{t('archiveFilterReason')}</span>
+                <select className="form-select archive-select" value={reason} onChange={(e) => setReason(e.target.value)}>
+                  <option value="all">{t('archiveAll')}</option>
+                  <option value="completed">{t('archiveReasonCompleted')}</option>
+                  <option value="delivered">{t('archiveReasonDelivered')}</option>
+                  <option value="manual">{t('archiveReasonManual')}</option>
+                </select>
+              </div>
+              <div className="archive-control-group archive-sort-group">
+                <span className="archive-control-label">{t('archiveSort')}</span>
+                <select className="form-select archive-select" value={sort} onChange={(e) => setSort(e.target.value)}>
+                  <option value="newest">{t('archiveSortNewest')}</option>
+                  <option value="oldest">{t('archiveSortOldest')}</option>
+                  <option value="az">{t('archiveSortAZ')}</option>
+                  <option value="za">{t('archiveSortZA')}</option>
+                </select>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm archive-reset-btn" onClick={() => { setFolder(null); resetFilters(); }}>{t('archiveReset')}</button>
+            </div>
+          </div>
+
+          <div className="archive-content">
           <div className="archive-header">
             <div className="archive-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h3>{folder ? clientNameById[String(folder)] || 'Client' : 'Alle taken'}</h3>
+              <h3>{folder ? clientNameById[String(folder)] || t('archiveClientFallback') : t('archiveAllTasks')}</h3>
               {activeFilters > 0 && (
                 <span style={{ fontSize: '11px', background: 'var(--accent-pale)', color: 'var(--accent)', padding: '2px 8px', borderRadius: '20px', fontWeight: '500' }}>
-                  {activeFilters} actieve {activeFilters > 1 ? 'filters' : 'filter'}
+                  {activeFilters === 1
+                    ? t('archiveActiveFilterSingular')
+                    : t('archiveActiveFilterPlural').replaceAll('{n}', String(activeFilters))}
                 </span>
               )}
             </div>
-            <span className="archive-header-count" style={{ fontSize: '12px', color: 'var(--text-3)' }}>{filtered.length} van {totalInFolder} taken</span>
+            <span className="archive-header-count" style={{ fontSize: '12px', color: 'var(--text-3)' }}>
+              {filtered.length} {t('archiveOf')} {totalInFolder} {t('archiveTaskWord')}
+            </span>
           </div>
 
           {filtered.length === 0 ? (
             <div style={{ padding: '42px', textAlign: 'center', color: 'var(--text-3)' }}>
               <div style={{ fontSize: '32px', marginBottom: '10px' }}>🗂</div>
-              <div style={{ fontStyle: 'italic', marginBottom: '12px' }}>Geen taken gevonden met de huidige filters.</div>
-              <button className="btn btn-ghost btn-sm" onClick={resetFilters}>↺ Filters wissen</button>
+              <div style={{ fontStyle: 'italic', marginBottom: '12px' }}>{t('archiveEmpty')}</div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={resetFilters}>{t('archiveClearFilters')}</button>
             </div>
           ) : (
-            filtered.map((t) => {
-              const assigneeMeta = ASSIGNEE[t.assignee] || { bg: '#999', init: t.assignee?.[0] || '?' };
-              const reasonKey = t.archivedReason || 'manual';
-              const clientName = clientNameById[String(t.clientId)] || t.client || '—';
+            filtered.map((task) => {
+              const assigneeMeta = ASSIGNEE[task.assignee] || { bg: '#999', init: task.assignee?.[0] || '?' };
+              const reasonKey = task.archivedReason || 'manual';
+              const clientName = clientNameById[String(task.clientId)] || task.client || '—';
               return (
-                <div key={t._id} className="archived-task" onClick={() => setModal(t)} style={{ cursor: 'pointer' }}>
+                <div key={task._id} className="archived-task" onClick={() => setModal(task)} style={{ cursor: 'pointer' }}>
                   <div className="check-icon">✓</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="archived-title">{t.title}</div>
+                    <div className="archived-title">{task.title}</div>
                     <div className="archived-meta">
                       <span>{clientName}</span>
-                      <span>{t.archivedAt ? new Date(t.archivedAt).toLocaleDateString('nl-NL') : '—'}</span>
+                      <span>{task.archivedAt ? new Date(task.archivedAt).toLocaleDateString(dateLocale(lang)) : '—'}</span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <span className="task-avatar" style={{ background: assigneeMeta.bg, width: '14px', height: '14px', fontSize: '7px' }}>{assigneeMeta.init}</span>
-                        {t.assignee || '—'}
+                        {task.assignee || '—'}
                       </span>
                     </div>
                   </div>
                   <div className="archived-task-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className={`archive-reason-tag ${REASON_CLASS[reasonKey] || 'ar-completed'}`}>{REASON_LABEL[reasonKey] || 'Afgerond'}</span>
+                    <span className={`archive-reason-tag ${REASON_CLASS[reasonKey] || 'ar-completed'}`}>{archiveReasonLabel(t, reasonKey)}</span>
                     <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>→</span>
                   </div>
                 </div>
               );
             })
           )}
+          </div>
         </div>
       </div>
 
@@ -236,17 +290,22 @@ export function ArchiefView() {
             <div className="modal-header"><div className="modal-title">{modal.title}</div><button className="modal-close" onClick={() => setModal(null)}>✕</button></div>
             <div className="modal-body">
               <div className="archive-modal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-                {[['Klant', clientNameById[String(modal.clientId)] || modal.client || '—'], ['Toegewezen', modal.assignee || '—'], ['Gearchiveerd', modal.archivedAt ? new Date(modal.archivedAt).toLocaleDateString('nl-NL') : '—'], ['Reden', REASON_LABEL[modal.archivedReason || 'manual'] || 'Handmatig']].map(([l, v]) => (
-                  <div key={l} style={{ background: 'var(--bg-alt)', borderRadius: '8px', padding: '10px 12px' }}>
-                    <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '3px' }}>{l}</div>
-                    <div style={{ fontSize: '13px', fontWeight: '500' }}>{v}</div>
+                {[
+                  [t('eventClientLabel'), clientNameById[String(modal.clientId)] || modal.client || '—'],
+                  [t('archiveModalAssignee'), modal.assignee || '—'],
+                  [t('archiveModalArchived'), modal.archivedAt ? new Date(modal.archivedAt).toLocaleDateString(dateLocale(lang)) : '—'],
+                  [t('archiveModalReason'), archiveReasonLabel(t, modal.archivedReason || 'manual')],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ background: 'var(--bg-alt)', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '3px' }}>{label}</div>
+                    <div style={{ fontSize: '13px', fontWeight: '500' }}>{value}</div>
                   </div>
                 ))}
               </div>
 
               {modal.description ? (
                 <div style={{ marginBottom: '16px' }}>
-                  <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '6px' }}>Beschrijving</div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '6px' }}>{t('archiveModalDescription')}</div>
                   <div style={{ background: 'var(--bg-alt)', borderRadius: '8px', padding: '12px', fontSize: '13px', color: 'var(--text-2)', lineHeight: '1.6' }}>
                     {modal.description}
                   </div>
@@ -256,7 +315,7 @@ export function ArchiefView() {
               {modal.checklist?.length ? (
                 <div>
                   <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '8px' }}>
-                    Checklist ({modal.checklist.filter((x) => x.done).length}/{modal.checklist.length})
+                    {t('archiveModalChecklist')} ({modal.checklist.filter((x) => x.done).length}/{modal.checklist.length})
                   </div>
                   <div style={{ display: 'grid', gap: '6px' }}>
                     {modal.checklist.map((item, idx) => (
@@ -269,8 +328,8 @@ export function ArchiefView() {
               ) : null}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--sage)', marginRight: 'auto' }} onClick={() => restoreMut.mutate(modal._id)}>↩ Herstellen naar To Do</button>
-              <button className="btn btn-ghost" onClick={() => setModal(null)}>Sluiten</button>
+              <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--sage)', marginRight: 'auto' }} onClick={() => restoreMut.mutate(modal._id)}>{t('archiveRestoreToTodo')}</button>
+              <button type="button" className="btn btn-ghost" onClick={() => setModal(null)}>{t('close')}</button>
             </div>
           </div>
         </div>

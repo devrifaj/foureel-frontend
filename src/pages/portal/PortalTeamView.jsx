@@ -11,6 +11,7 @@ import {
   updateVideo,
 } from "../../api";
 import { useAuth } from "../../context/AuthContext";
+import { DASHBOARD_BASE } from "../../paths";
 
 function useClientPortalData(clientId) {
   const notesQuery = useQuery({
@@ -158,7 +159,7 @@ export default function PortalTeamView() {
         </div>
         <div className="portal-header-client">
           <span>{user?.name}</span>
-          <a href="/" style={{ color: "var(--accent)", fontWeight: 600 }}>
+          <a href={DASHBOARD_BASE} style={{ color: "var(--accent)", fontWeight: 600 }}>
             Dashboard
           </a>
           <button className="portal-logout" onClick={logout}>

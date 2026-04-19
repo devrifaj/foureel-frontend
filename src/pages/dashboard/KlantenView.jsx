@@ -1,5 +1,7 @@
 // KlantenView.jsx - Client management (Info, Portaal, Retainer, …) — MERN API
 import { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { DASHBOARD_BASE } from '../../paths';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getClients,
@@ -550,6 +552,8 @@ function PortaalTab({ client }) {
 
 const fieldErrStyle = { fontSize: '12px', color: '#c04040', marginTop: '6px', marginBottom: 0, lineHeight: 1.4 };
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onClearServerError }) {
   const [name, setName] = useState('');
   const [sector, setSector] = useState('');
@@ -562,7 +566,7 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
   const [urgentReason, setUrgentReason] = useState('');
   const [portalEmail, setPortalEmail] = useState('');
   const [portalPassword, setPortalPassword] = useState('');
-  const [nameError, setNameError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     if (open) {
@@ -577,7 +581,7 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
       setUrgentReason('');
       setPortalEmail('');
       setPortalPassword('');
-      setNameError('');
+      setFieldErrors({});
     }
   }, [open]);
 
@@ -589,27 +593,58 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
     if (serverError) onClearServerError?.();
   };
 
+  const setErr = (key, msg) => {
+    setFieldErrors((prev) => ({ ...prev, [key]: msg || '' }));
+  };
+
   const handleSave = () => {
-    if (!name.trim()) {
-      setNameError(lang === 'en' ? 'Enter a company name.' : 'Vul een bedrijfsnaam in.');
-      return;
+    const err = {};
+    const en = lang === 'en';
+    if (!name.trim()) err.name = en ? 'Enter a company name.' : 'Vul een bedrijfsnaam in.';
+    const em = email.trim();
+    if (em && !EMAIL_REGEX.test(em)) err.email = en ? 'Enter a valid email address.' : 'Vul een geldig e-mailadres in.';
+    if (urgent && !urgentReason.trim()) {
+      err.urgentReason = en ? 'Enter a reason for urgency.' : 'Vul een reden voor urgentie in.';
     }
-    setNameError('');
+    const pe = portalEmail.trim().toLowerCase();
+    const pp = portalPassword.trim();
+    if (pe && !EMAIL_REGEX.test(pe)) {
+      err.portalEmail = en ? 'Enter a valid portal email.' : 'Vul een geldig portaal-e-mailadres in.';
+    }
+    if ((pe && !pp) || (!pe && pp)) {
+      if (!pe && pp) {
+        err.portalEmail = en ? 'Portal email is required when setting a password.' : 'Portaal-e-mail is verplicht bij een wachtwoord.';
+      }
+      if (pe && !pp) {
+        err.portalPassword = en
+          ? 'Portal password is required when setting portal email (min. 8 characters).'
+          : 'Portaalwachtwoord is verplicht bij portaal-e-mail (min. 8 tekens).';
+      }
+    }
+    if (pe && pp && pp.length < 8) {
+      err.portalPassword = en
+        ? 'Portal password must be at least 8 characters.'
+        : 'Portaalwachtwoord moet minimaal 8 tekens zijn.';
+    }
+    setFieldErrors(err);
+    if (Object.keys(err).length) return;
     onSave({
       name: name.trim(),
       sector: sector.trim() || undefined,
       phase,
       contact: contact.trim() || undefined,
-      email: email.trim() || undefined,
+      email: em ? em : undefined,
       phone: phone.trim() || undefined,
       since: since || undefined,
       urgent,
       urgentReason: urgent ? urgentReason.trim() || undefined : undefined,
       color: pickColor(name),
-      portalEmail: portalEmail.trim().toLowerCase() || undefined,
-      portalPassword: portalPassword.trim() || undefined,
+      portalEmail: pe || undefined,
+      portalPassword: pp || undefined,
     });
   };
+
+  const inputErrBorder = (key) => (fieldErrors[key] ? { borderColor: '#c04040' } : undefined);
 
   return (
     <div className="modal-overlay open" role="dialog" aria-modal="true" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -622,23 +657,25 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-            <label className="form-label">{lang === 'en' ? 'Company name' : 'Bedrijfsnaam'}</label>
+            <label className="form-label">
+              {lang === 'en' ? 'Company name' : 'Bedrijfsnaam'} <span style={{ color: '#c04040' }}>*</span>
+            </label>
             <input
               className="form-input"
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
-                if (nameError) setNameError('');
+                if (fieldErrors.name) setErr('name', '');
                 clearServerError();
               }}
               placeholder={lang === 'en' ? 'Company name…' : 'Naam van het bedrijf…'}
-              aria-invalid={!!nameError}
-              aria-describedby={nameError ? 'add-client-name-err' : undefined}
-              style={nameError ? { borderColor: '#c04040' } : undefined}
+              aria-invalid={!!fieldErrors.name}
+              aria-describedby={fieldErrors.name ? 'add-client-name-err' : undefined}
+              style={inputErrBorder('name')}
             />
-            {nameError && (
+            {fieldErrors.name && (
               <p id="add-client-name-err" role="alert" style={fieldErrStyle}>
-                {nameError}
+                {fieldErrors.name}
               </p>
             )}
           </div>
@@ -691,10 +728,19 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
+                if (fieldErrors.email) setErr('email', '');
                 clearServerError();
               }}
               placeholder="email@bedrijf.nl"
+              aria-invalid={!!fieldErrors.email}
+              aria-describedby={fieldErrors.email ? 'add-client-email-err' : undefined}
+              style={inputErrBorder('email')}
             />
+            {fieldErrors.email && (
+              <p id="add-client-email-err" role="alert" style={fieldErrStyle}>
+                {fieldErrors.email}
+              </p>
+            )}
           </div>
           <div className="form-group">
             <label className="form-label">{lang === 'en' ? 'Phone' : 'Telefoon'}</label>
@@ -721,30 +767,54 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
             />
           </div>
           <div className="form-group">
-            <label className="form-label">{lang === 'en' ? 'Portal login email' : 'Portaal login e-mail'}</label>
+            <label className="form-label">
+              {lang === 'en' ? 'Portal login email (optional)' : 'Portaal login e-mail (optioneel)'}
+            </label>
             <input
               className="form-input"
               type="email"
               value={portalEmail}
               onChange={(e) => {
                 setPortalEmail(e.target.value);
+                if (fieldErrors.portalEmail) setErr('portalEmail', '');
+                if (fieldErrors.portalPassword) setErr('portalPassword', '');
                 clearServerError();
               }}
               placeholder="client@bedrijf.nl"
+              aria-invalid={!!fieldErrors.portalEmail}
+              aria-describedby={fieldErrors.portalEmail ? 'add-client-portal-email-err' : undefined}
+              style={inputErrBorder('portalEmail')}
             />
+            {fieldErrors.portalEmail && (
+              <p id="add-client-portal-email-err" role="alert" style={fieldErrStyle}>
+                {fieldErrors.portalEmail}
+              </p>
+            )}
           </div>
           <div className="form-group">
-            <label className="form-label">{lang === 'en' ? 'Portal login password' : 'Portaal login wachtwoord'}</label>
+            <label className="form-label">
+              {lang === 'en' ? 'Portal login password (optional)' : 'Portaal login wachtwoord (optioneel)'}
+            </label>
             <input
               className="form-input"
               type="password"
               value={portalPassword}
               onChange={(e) => {
                 setPortalPassword(e.target.value);
+                if (fieldErrors.portalEmail) setErr('portalEmail', '');
+                if (fieldErrors.portalPassword) setErr('portalPassword', '');
                 clearServerError();
               }}
-              placeholder={lang === 'en' ? 'Set initial password' : 'Stel initieel wachtwoord in'}
+              placeholder={lang === 'en' ? 'Only with portal email, min. 8 characters' : 'Alleen met portaal-e-mail, min. 8 tekens'}
+              aria-invalid={!!fieldErrors.portalPassword}
+              aria-describedby={fieldErrors.portalPassword ? 'add-client-portal-pw-err' : undefined}
+              style={inputErrBorder('portalPassword')}
             />
+            {fieldErrors.portalPassword && (
+              <p id="add-client-portal-pw-err" role="alert" style={fieldErrStyle}>
+                {fieldErrors.portalPassword}
+              </p>
+            )}
           </div>
         </div>
         <hr className="form-divider" />
@@ -777,18 +847,33 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
           </label>
         </div>
         <div className="form-group" style={{ marginBottom: urgent ? undefined : 0 }}>
-          <label className="form-label">{lang === 'en' ? 'Reason' : 'Reden urgentie'}</label>
+          <label className="form-label">
+            {lang === 'en' ? 'Reason' : 'Reden urgentie'}
+            {urgent ? <span style={{ color: '#c04040' }}> *</span> : null}
+          </label>
           <input
             className="form-input"
             value={urgentReason}
             onChange={(e) => {
               setUrgentReason(e.target.value);
+              if (fieldErrors.urgentReason) setErr('urgentReason', '');
               clearServerError();
             }}
             placeholder={lang === 'en' ? 'e.g. Missed deadline' : 'bijv. Deadline overschreden'}
             disabled={!urgent}
-            style={!urgent ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}
+            style={
+              !urgent
+                ? { opacity: 0.55, cursor: 'not-allowed' }
+                : inputErrBorder('urgentReason')
+            }
+            aria-invalid={urgent && !!fieldErrors.urgentReason}
+            aria-describedby={urgent && fieldErrors.urgentReason ? 'add-client-urgent-err' : undefined}
           />
+          {urgent && fieldErrors.urgentReason && (
+            <p id="add-client-urgent-err" role="alert" style={fieldErrStyle}>
+              {fieldErrors.urgentReason}
+            </p>
+          )}
           {!urgent && (
             <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '8px', marginBottom: 0 }}>
               {lang === 'en'
@@ -864,21 +949,48 @@ function DeleteClientModal({ open, onClose, onConfirm, deleting, lang, clientNam
 function PortalAccessModal({ open, onClose, onSave, saving, lang, currentEmail, serverError, onClearServerError }) {
   const [portalEmail, setPortalEmail] = useState('');
   const [portalPassword, setPortalPassword] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     if (!open) return;
     setPortalEmail(currentEmail || '');
     setPortalPassword('');
+    setFieldErrors({});
   }, [open, currentEmail]);
 
   if (!open) return null;
 
+  const en = lang === 'en';
+  const hasExistingPortal = Boolean((currentEmail || '').trim());
+
   const save = () => {
+    const pe = portalEmail.trim().toLowerCase();
+    const pp = portalPassword.trim();
+    const err = {};
+    if (!pe) {
+      err.portalEmail = en ? 'Enter a portal login email.' : 'Vul een portaal login e-mail in.';
+    } else if (!EMAIL_REGEX.test(pe)) {
+      err.portalEmail = en ? 'Enter a valid email address.' : 'Vul een geldig e-mailadres in.';
+    }
+    if (!hasExistingPortal && !pp) {
+      err.portalPassword = en
+        ? 'Enter a password (min. 8 characters) for the first portal login.'
+        : 'Vul een wachtwoord in (min. 8 tekens) voor de eerste portaaltoegang.';
+    }
+    if (pp && pp.length < 8) {
+      err.portalPassword = en
+        ? 'Password must be at least 8 characters.'
+        : 'Wachtwoord moet minimaal 8 tekens zijn.';
+    }
+    setFieldErrors(err);
+    if (Object.keys(err).length) return;
     onSave({
-      portalEmail: portalEmail.trim().toLowerCase() || undefined,
-      portalPassword: portalPassword.trim() || undefined,
+      portalEmail: pe || undefined,
+      portalPassword: pp || undefined,
     });
   };
+
+  const portalInputErr = (key) => (fieldErrors[key] ? { borderColor: '#c04040' } : undefined);
 
   return (
     <div className="modal-overlay open" role="dialog" aria-modal="true" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -890,17 +1002,28 @@ function PortalAccessModal({ open, onClose, onSave, saving, lang, currentEmail, 
           </button>
         </div>
         <div className="form-group">
-          <label className="form-label">{lang === 'en' ? 'Portal login email' : 'Portaal login e-mail'}</label>
+          <label className="form-label">
+            {lang === 'en' ? 'Portal login email' : 'Portaal login e-mail'} <span style={{ color: '#c04040' }}>*</span>
+          </label>
           <input
             className="form-input"
             type="email"
             value={portalEmail}
             onChange={(e) => {
               setPortalEmail(e.target.value);
+              if (fieldErrors.portalEmail) setFieldErrors((p) => ({ ...p, portalEmail: '' }));
               onClearServerError?.();
             }}
             placeholder="client@bedrijf.nl"
+            aria-invalid={!!fieldErrors.portalEmail}
+            aria-describedby={fieldErrors.portalEmail ? 'portal-access-email-err' : undefined}
+            style={portalInputErr('portalEmail')}
           />
+          {fieldErrors.portalEmail && (
+            <p id="portal-access-email-err" role="alert" style={fieldErrStyle}>
+              {fieldErrors.portalEmail}
+            </p>
+          )}
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label className="form-label">{lang === 'en' ? 'New password (optional)' : 'Nieuw wachtwoord (optioneel)'}</label>
@@ -910,10 +1033,19 @@ function PortalAccessModal({ open, onClose, onSave, saving, lang, currentEmail, 
             value={portalPassword}
             onChange={(e) => {
               setPortalPassword(e.target.value);
+              if (fieldErrors.portalPassword) setFieldErrors((p) => ({ ...p, portalPassword: '' }));
               onClearServerError?.();
             }}
             placeholder={lang === 'en' ? 'Only fill to set/reset password' : 'Alleen invullen om wachtwoord te zetten/resetten'}
+            aria-invalid={!!fieldErrors.portalPassword}
+            aria-describedby={fieldErrors.portalPassword ? 'portal-access-pw-err' : undefined}
+            style={portalInputErr('portalPassword')}
           />
+          {fieldErrors.portalPassword && (
+            <p id="portal-access-pw-err" role="alert" style={fieldErrStyle}>
+              {fieldErrors.portalPassword}
+            </p>
+          )}
         </div>
         {serverError && (
           <p role="alert" style={{ ...fieldErrStyle, marginTop: '10px' }}>
@@ -935,7 +1067,9 @@ function PortalAccessModal({ open, onClose, onSave, saving, lang, currentEmail, 
 
 export default function KlantenView() {
   const { t, lang } = useLang();
-  const [selectedId, setSelectedId] = useState(null);
+  const { clientId: clientIdParam } = useParams();
+  const navigate = useNavigate();
+  const selectedId = clientIdParam || null;
   const [tab, setTab] = useState('info');
   const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -946,13 +1080,28 @@ export default function KlantenView() {
   const qc = useQueryClient();
 
   const { data: clients = [], isLoading: isClientsLoading } = useQuery({ queryKey: ['clients'], queryFn: getClients });
-  const { data: selectedFresh } = useQuery({
+  const {
+    data: selectedFresh,
+    isError: isSelectedError,
+    isFetched: isSelectedFetched,
+    isPending: isSelectedPending,
+  } = useQuery({
     queryKey: ['client', selectedId],
     queryFn: () => getClient(selectedId),
     enabled: !!selectedId,
   });
 
-  const selected = selectedFresh || clients.find((c) => c._id === selectedId) || null;
+  const selected = selectedFresh || clients.find((c) => String(c._id) === String(selectedId)) || null;
+  const showDetailShell = Boolean(selectedId && (selected || isSelectedPending));
+
+  useEffect(() => {
+    if (!selectedId || !isSelectedFetched || !isSelectedError) return;
+    navigate(`${DASHBOARD_BASE}/klanten`, { replace: true });
+  }, [selectedId, isSelectedFetched, isSelectedError, navigate]);
+
+  useEffect(() => {
+    if (clientIdParam) setTab('info');
+  }, [clientIdParam]);
 
   const updateMut = useMutation({
     mutationFn: ({ id, ...d }) => updateClient(id, d),
@@ -979,7 +1128,7 @@ export default function KlantenView() {
       qc.invalidateQueries({ queryKey: ['clients'] });
       setDeleteError('');
       setDeleteOpen(false);
-      setSelectedId(null);
+      navigate(`${DASHBOARD_BASE}/klanten`, { replace: true });
     },
     onError: (e) =>
       setDeleteError(e.message || (lang === 'en' ? 'Could not delete client.' : 'Klant kon niet worden verwijderd.')),
@@ -1005,8 +1154,8 @@ export default function KlantenView() {
       : `${clients.length} actieve klantrelatie${clients.length === 1 ? '' : 's'}`;
 
   const openDetail = (c) => {
-    setSelectedId(c._id);
     setTab('info');
+    navigate(`${DASHBOARD_BASE}/klanten/${c._id}`);
   };
 
   const backToList = () => {
@@ -1014,7 +1163,7 @@ export default function KlantenView() {
     setDeleteOpen(false);
     setPortalAccessError('');
     setPortalAccessOpen(false);
-    setSelectedId(null);
+    navigate(`${DASHBOARD_BASE}/klanten`);
   };
 
   const saveClient = (data) => {
@@ -1053,7 +1202,19 @@ export default function KlantenView() {
     />
   );
 
-  if (selected) {
+  if (showDetailShell) {
+    if (!selected) {
+      return (
+        <>
+          <section className="view active" id="view-klanten">
+            <div style={{ padding: '40px', color: 'var(--text-3)' }}>
+              {lang === 'en' ? 'Loading client…' : 'Klant laden…'}
+            </div>
+          </section>
+          {addModal}
+        </>
+      );
+    }
     const c = selected;
     const initials = c.name
       .split(' ')

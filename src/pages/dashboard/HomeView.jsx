@@ -1,11 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { DASHBOARD_BASE } from '../../paths';
 import { useLang } from '../../context/LangContext';
 import { useAuth } from '../../context/AuthContext';
-import { getClients, getTasks, getEvents, getActivity, createEvent } from '../../api';
+import { getClients, getTasks, getEvents, getActivity, createEvent, updateEvent, getTeamMembers } from '../../api';
 import { useState, useMemo } from 'react';
-import HomeDayModal from './HomeDayModal';
-import HomeAddEventModal from './HomeAddEventModal';
+import EventDayModal from './EventDayModal';
+import EventFormModal from '../../components/EventFormModal';
+import { sortEventsBySchedule, formatEventTime } from '../../utils/dateTimeFormat';
+import { getAssigneeInitials, getAssigneeMonogramStyle } from '../../utils/eventAssignee';
+import { emptyEventForm, eventToFormState, joinDateAndTimeForLocalInput } from '../../utils/eventFormState';
 
 const MONTHS = ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
 const DS_NL  = ['Zo','Ma','Di','Wo','Do','Vr','Za'];
@@ -18,7 +22,7 @@ function getMon(d) {
 function dStr(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function sameD(a,b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
 
-function WeekGrid({ start, events, onDayClick }) {
+function WeekGrid({ start, events, onDayClick, isTeam, locale }) {
   const TODAY = new Date(); TODAY.setHours(0,0,0,0);
   return (
     <div className="week-grid">
@@ -27,7 +31,7 @@ function WeekGrid({ start, events, onDayClick }) {
         const ds = dStr(d);
         const isT = sameD(d, TODAY);
         const isP = d < TODAY;
-        const dayEvs = events.filter(e => e.date === ds);
+        const dayEvs = sortEventsBySchedule(events.filter(e => e.date === ds));
         return (
           <div
             key={ds}
@@ -48,9 +52,45 @@ function WeekGrid({ start, events, onDayClick }) {
               <div className="day-num">{d.getDate()}</div>
             </div>
             <div className="event-chips">
-              {dayEvs.slice(0,3).map(e => (
-                <div key={e._id} className={`chip ${TYPE_CLS[e.type]||'chip-shoot'}`} title={e.name}>{e.name}</div>
-              ))}
+              {dayEvs.slice(0,3).map(e => {
+                const initials = getAssigneeInitials(e, { maxLength: 2 });
+                const monoStyle = getAssigneeMonogramStyle(e);
+                const assigneeName = e.assigneeId && typeof e.assigneeId === 'object' ? e.assigneeId.name : '';
+                const timeDisp = formatEventTime(e.time, locale, { hour12: true });
+                return (
+                  <div
+                    key={e._id}
+                    role={isTeam && !isP ? 'button' : undefined}
+                    tabIndex={isTeam && !isP ? 0 : undefined}
+                    className={`chip event-chip-row ${TYPE_CLS[e.type]||'chip-shoot'}`}
+                    title={e.name}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      if (!isP && isTeam) onDayClick(ds);
+                    }}
+                    onKeyDown={(ev) => {
+                      if (isP || !isTeam) return;
+                      if (ev.key === 'Enter' || ev.key === ' ') {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        onDayClick(ds);
+                      }
+                    }}
+                  >
+                    <span className="event-chip-name">{e.name}</span>
+                    {initials ? (
+                      <span
+                        className="event-chip-ini"
+                        style={monoStyle}
+                        title={assigneeName || undefined}
+                      >
+                        {initials}
+                      </span>
+                    ) : null}
+                    {timeDisp ? <span className="event-chip-time">{timeDisp}</span> : null}
+                  </div>
+                );
+              })}
               {dayEvs.length > 3 && <div className="chip" style={{background:'var(--bg-alt)',color:'var(--text-3)'}}>+{dayEvs.length-3}</div>}
             </div>
           </div>
@@ -62,18 +102,25 @@ function WeekGrid({ start, events, onDayClick }) {
 
 export default function HomeView() {
   const navigate = useNavigate();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const locale = lang === 'en' ? 'en-GB' : 'nl-NL';
   const { user } = useAuth();
   const isTeam = user?.role === 'team';
   const qc = useQueryClient();
   const [dayModalDate, setDayModalDate] = useState(null);
-  const [addModal, setAddModal] = useState(false);
-  const [form, setForm] = useState({ name:'', type:'Shoot', date:'', client:'', notes:'' });
+  const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [editingEventId, setEditingEventId] = useState(null);
+  const [form, setForm] = useState(emptyEventForm);
   const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 
   const { data: clients = [] } = useQuery({
     queryKey: ['clients'],
     queryFn: getClients,
+    enabled: isTeam,
+  });
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ['team'],
+    queryFn: getTeamMembers,
     enabled: isTeam,
   });
   const { data: tasks = [] } = useQuery({
@@ -92,24 +139,26 @@ export default function HomeView() {
     enabled: isTeam,
   });
 
-  const createMut = useMutation({
+  const saveEventMut = useMutation({
     mutationFn: (body) => {
       if (!isTeam) return Promise.reject(new Error(t('eventCreateForbidden')));
+      if (editingEventId) return updateEvent(editingEventId, body);
       return createEvent(body);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['events'] });
       qc.invalidateQueries({ queryKey: ['activity'] });
-      setAddModal(false);
+      setEventModalOpen(false);
       setDayModalDate(null);
-      setForm({ name:'', type:'Shoot', date:'', client:'', notes:'' });
+      setEditingEventId(null);
+      setForm(emptyEventForm());
     },
   });
 
-  const dayModalEvents = useMemo(
-    () => (dayModalDate ? events.filter((e) => e.date === dayModalDate) : []),
-    [events, dayModalDate],
-  );
+  const dayModalEvents = useMemo(() => {
+    if (!dayModalDate) return [];
+    return sortEventsBySchedule(events.filter((e) => e.date === dayModalDate));
+  }, [events, dayModalDate]);
 
   const openDayFlow = (ds) => {
     if (!isTeam) return;
@@ -118,6 +167,27 @@ export default function HomeView() {
     t0.setHours(0, 0, 0, 0);
     if (d < t0) return;
     setDayModalDate(ds);
+  };
+
+  const openCreateEventForDate = (ds) => {
+    setEditingEventId(null);
+    setForm({ ...emptyEventForm(), dateTime: joinDateAndTimeForLocalInput(ds, '12:00') });
+    setDayModalDate(null);
+    setEventModalOpen(true);
+  };
+
+  const openEditEvent = (e) => {
+    if (!isTeam) return;
+    setEditingEventId(e._id);
+    setForm(eventToFormState(e));
+    setDayModalDate(null);
+    setEventModalOpen(true);
+  };
+
+  const closeEventModal = () => {
+    setEventModalOpen(false);
+    setEditingEventId(null);
+    setForm(emptyEventForm());
   };
 
   const mon  = getMon(TODAY);
@@ -143,10 +213,10 @@ export default function HomeView() {
 
       <div className="kpi-grid">
         {[
-          { cls:'kpi-0', lbl:t('activeClients'), val:clients.length, desc:t('kpiDescOngoingProjects'), click:()=>navigate('/klanten'), id:'kpi-clients' },
-          { cls:'kpi-1', lbl:t('shootsMonth'), val:shoots, desc:t('kpiDescScheduled'), click:()=>navigate('/agenda'), id:'kpi-shoots' },
-          { cls:'kpi-2', lbl:t('kpiTasksInProgress'), val:openTasks, desc:t('kpiDescAcrossProjects'), click:()=>navigate('/taken'), id:'kpi-tasks' },
-          { cls:'kpi-3', lbl:t('kpiUrgentClients'), val:urgent, desc:t('kpiDescRequiresAttention'), click:()=>navigate('/klanten'), id:'kpi-urgent' },
+          { cls:'kpi-0', lbl:t('activeClients'), val:clients.length, desc:t('kpiDescOngoingProjects'), click:()=>navigate(`${DASHBOARD_BASE}/klanten`), id:'kpi-clients' },
+          { cls:'kpi-1', lbl:t('shootsMonth'), val:shoots, desc:t('kpiDescScheduled'), click:()=>navigate(`${DASHBOARD_BASE}/agenda`), id:'kpi-shoots' },
+          { cls:'kpi-2', lbl:t('kpiTasksInProgress'), val:openTasks, desc:t('kpiDescAcrossProjects'), click:()=>navigate(`${DASHBOARD_BASE}/taken`), id:'kpi-tasks' },
+          { cls:'kpi-3', lbl:t('kpiUrgentClients'), val:urgent, desc:t('kpiDescRequiresAttention'), click:()=>navigate(`${DASHBOARD_BASE}/klanten`), id:'kpi-urgent' },
         ].map(k => (
           <div key={k.cls} className={`kpi-card ${k.cls}`} onClick={k.click}>
             <div className="kpi-label">{k.lbl}</div>
@@ -161,13 +231,25 @@ export default function HomeView() {
           <div className="week-section">
             <div className="week-label" id="week-label-current">{t('thisWeek')}</div>
             <div id="week-current">
-              <WeekGrid start={mon} events={events} onDayClick={openDayFlow} />
+              <WeekGrid
+                start={mon}
+                events={events}
+                onDayClick={openDayFlow}
+                isTeam={isTeam}
+                locale={locale}
+              />
             </div>
           </div>
           <div className="week-section">
             <div className="week-label" id="week-label-next">{t('nextWeek')}</div>
             <div id="week-next">
-              <WeekGrid start={nmon} events={events} onDayClick={openDayFlow} />
+              <WeekGrid
+                start={nmon}
+                events={events}
+                onDayClick={openDayFlow}
+                isTeam={isTeam}
+                locale={locale}
+              />
             </div>
           </div>
         </div>
@@ -192,24 +274,23 @@ export default function HomeView() {
         </div>
       </div>
 
-      <HomeDayModal
+      <EventDayModal
         date={dayModalDate}
         events={dayModalEvents}
         onClose={() => setDayModalDate(null)}
-        onAddEvent={(d) => {
-          setForm((f) => ({ ...f, date: d }));
-          setDayModalDate(null);
-          setAddModal(true);
-        }}
+        onAddEvent={openCreateEventForDate}
+        onEventClick={openEditEvent}
       />
 
-      <HomeAddEventModal
-        open={addModal}
-        onClose={() => setAddModal(false)}
+      <EventFormModal
+        open={eventModalOpen}
+        onClose={closeEventModal}
+        mode={editingEventId ? 'edit' : 'create'}
         form={form}
         setForm={setForm}
         clients={clients}
-        createMut={createMut}
+        teamMembers={teamMembers}
+        saveMut={saveEventMut}
         isTeam={isTeam}
       />
     </section>

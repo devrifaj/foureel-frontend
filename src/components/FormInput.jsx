@@ -48,6 +48,7 @@ export default function FormInput({
   type = "text",
   className = "",
   inputClassName = "",
+  errorMessage,
   ...rest
 }) {
   const [showPassword, setShowPassword] = useState(false);
@@ -65,6 +66,8 @@ export default function FormInput({
           id={id}
           type={resolvedType}
           className={inputClassName}
+          aria-invalid={errorMessage ? true : undefined}
+          aria-describedby={errorMessage && id ? `${id}-error` : undefined}
           {...rest}
         />
         {isPassword ? (
@@ -79,6 +82,11 @@ export default function FormInput({
           </button>
         ) : null}
       </div>
+      {errorMessage ? (
+        <p id={id ? `${id}-error` : undefined} className="login-field-error" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
     </div>
   );
 }

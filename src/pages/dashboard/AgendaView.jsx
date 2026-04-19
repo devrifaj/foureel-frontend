@@ -1,30 +1,55 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getEvents, getClients, createEvent } from '../../api';
+import { useAuth } from '../../context/AuthContext';
+import { useLang } from '../../context/LangContext';
+import { getEvents, getClients, getTeamMembers, createEvent, updateEvent } from '../../api';
+import EventDayModal from './EventDayModal';
+import EventFormModal from '../../components/EventFormModal';
+import { sortEventsBySchedule, formatEventTime } from '../../utils/dateTimeFormat';
+import { getAssigneeInitials, getAssigneeMonogramStyle } from '../../utils/eventAssignee';
+import { emptyEventForm, eventToFormState, joinDateAndTimeForLocalInput } from '../../utils/eventFormState';
 
 const MONTHS = ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
 const TYPE_CLS = { Shoot:'chip-shoot', Edit:'chip-edit', Deadline:'chip-deadline', Call:'chip-call', Delivery:'chip-delivery' };
-const TYPE_COLOR = { Shoot:'var(--sage)', Edit:'var(--amber)', Deadline:'var(--orange)', Call:'var(--blue)', Delivery:'var(--purple)' };
-const TYPES = ['Shoot','Edit','Deadline','Call','Delivery'];
 
 function dStr(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 
 export default function AgendaView() {
+  const { user } = useAuth();
+  const { t, lang } = useLang();
+  const isTeam = user?.role === 'team';
+  const locale = lang === 'en' ? 'en-GB' : 'nl-NL';
   const today = new Date();
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth());
   const [dayModal, setDayModal] = useState(null);
-  const [addModal, setAddModal] = useState(false);
-  const [form, setForm] = useState({ name:'', type:'Shoot', date:'', client:'', notes:'' });
+  const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [editingEventId, setEditingEventId] = useState(null);
+  const [form, setForm] = useState(emptyEventForm);
   const [isFs, setIsFs] = useState(false);
   const qc = useQueryClient();
 
-  const { data: events = [] }  = useQuery({ queryKey:['events'],  queryFn: getEvents });
-  const { data: clients = [] } = useQuery({ queryKey:['clients'], queryFn: getClients });
+  const { data: events = [] } = useQuery({ queryKey: ['events'], queryFn: getEvents, enabled: isTeam });
+  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: getClients, enabled: isTeam });
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ['team'],
+    queryFn: getTeamMembers,
+    enabled: isTeam,
+  });
 
-  const createMut = useMutation({
-    mutationFn: createEvent,
-    onSuccess: () => { qc.invalidateQueries(['events']); setAddModal(false); setForm({ name:'', type:'Shoot', date:'', client:'', notes:'' }); }
+  const saveEventMut = useMutation({
+    mutationFn: (body) => {
+      if (!isTeam) return Promise.reject(new Error(t('eventCreateForbidden')));
+      if (editingEventId) return updateEvent(editingEventId, body);
+      return createEvent(body);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['events'] });
+      setEventModalOpen(false);
+      setEditingEventId(null);
+      setDayModal(null);
+      setForm(emptyEventForm());
+    },
   });
 
   useEffect(() => {
@@ -61,6 +86,31 @@ export default function AgendaView() {
 
   const monthLabel = `${MONTHS[calMonth]} ${calYear}`;
   const fsTodayLabel = today.toLocaleDateString('nl-NL', { weekday: 'short', day: '2-digit', month: 'short' });
+
+  const openDayModal = (ds, dayEvs) => {
+    setDayModal({ date: ds, events: sortEventsBySchedule(dayEvs) });
+  };
+
+  const openCreateFromDay = (ds) => {
+    setEditingEventId(null);
+    setForm({ ...emptyEventForm(), dateTime: joinDateAndTimeForLocalInput(ds, '12:00') });
+    setDayModal(null);
+    setEventModalOpen(true);
+  };
+
+  const openEditEvent = (e) => {
+    if (!isTeam) return;
+    setEditingEventId(e._id);
+    setForm(eventToFormState(e));
+    setDayModal(null);
+    setEventModalOpen(true);
+  };
+
+  const closeEventModal = () => {
+    setEventModalOpen(false);
+    setEditingEventId(null);
+    setForm(emptyEventForm());
+  };
 
   return (
     <section className="view active" id="view-agenda">
@@ -100,7 +150,19 @@ export default function AgendaView() {
           <div className="page-subtitle">Shoots, edits, deadlines & calls</div>
         </div>
         <div className="agenda-header-actions">
-          <button className="btn btn-primary" onClick={() => setAddModal(true)}>+ Event</button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setEditingEventId(null);
+              const d = new Date();
+              const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+              setForm({ ...emptyEventForm(), dateTime: joinDateAndTimeForLocalInput(ds, '12:00') });
+              setEventModalOpen(true);
+            }}
+          >
+            + Event
+          </button>
           <button className="fs-btn" onClick={toggleFs} title="Presentatiemodus">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M1 6V1h5M10 1h5v5M15 10v5h-5M6 15H1v-5"/>
@@ -128,18 +190,51 @@ export default function AgendaView() {
           ))}
           {Array.from({length:dim},(_,i)=>i+1).map(day => {
             const ds = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-            const dayEvs = events.filter(e => e.date === ds);
+            const dayEvs = sortEventsBySchedule(events.filter(e => e.date === ds));
             const isT = ds === todayStr;
             return (
               <div key={day}
-                onClick={() => setDayModal({ date: ds, events: dayEvs })}
+                onClick={() => openDayModal(ds, dayEvs)}
                 className={`cal-cell${isT ? ' today' : ''}`}
               >
                 <div className="cal-day-num">{day}</div>
-                <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
-                  {dayEvs.slice(0,3).map(e => (
-                    <div key={e._id} className={`chip ${TYPE_CLS[e.type]||'chip-shoot'}`} style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</div>
-                  ))}
+                <div className="cal-cell-chips">
+                  {dayEvs.slice(0,3).map(e => {
+                    const initials = getAssigneeInitials(e, { maxLength: 2 });
+                    const monoStyle = getAssigneeMonogramStyle(e);
+                    const assigneeName = e.assigneeId && typeof e.assigneeId === 'object' ? e.assigneeId.name : '';
+                    const timeDisp = formatEventTime(e.time, locale, { hour12: true });
+                    return (
+                      <div
+                        key={e._id}
+                        role={isTeam ? 'button' : undefined}
+                        tabIndex={isTeam ? 0 : undefined}
+                        className={`chip event-chip-row ${TYPE_CLS[e.type]||'chip-shoot'}`}
+                        style={{ overflow: 'hidden' }}
+                        title={e.name}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          if (isTeam) openDayModal(ds, dayEvs);
+                        }}
+                        onKeyDown={(ev) => {
+                          if (!isTeam) return;
+                          if (ev.key === 'Enter' || ev.key === ' ') {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            openDayModal(ds, dayEvs);
+                          }
+                        }}
+                      >
+                        <span className="event-chip-name">{e.name}</span>
+                        {initials ? (
+                          <span className="event-chip-ini" style={monoStyle} title={assigneeName || undefined}>
+                            {initials}
+                          </span>
+                        ) : null}
+                        {timeDisp ? <span className="event-chip-time">{timeDisp}</span> : null}
+                      </div>
+                    );
+                  })}
                   {dayEvs.length>3 && <div className="chip" style={{background:'var(--bg-alt)',color:'var(--text-3)'}}>+{dayEvs.length-3}</div>}
                 </div>
               </div>
@@ -148,81 +243,25 @@ export default function AgendaView() {
         </div>
       </div>
 
-      {/* Day Modal */}
-      {dayModal && (
-        <div className="modal-overlay open" onClick={() => setDayModal(null)}>
-          <div className="modal" onClick={e=>e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title">{dayModal.date}</div>
-              <button className="modal-close" onClick={() => setDayModal(null)}>✕</button>
-            </div>
-            <div className="modal-body">
-              {dayModal.events.length === 0
-                ? <p style={{fontSize:'13px',color:'var(--text-3)',fontStyle:'italic'}}>Geen events op deze dag.</p>
-                : dayModal.events.map(e => (
-                    <div key={e._id} style={{display:'flex',gap:'12px',padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
-                      <div style={{width:'8px',height:'8px',borderRadius:'50%',background:TYPE_COLOR[e.type],flexShrink:0,marginTop:'5px'}}/>
-                      <div>
-                        <div style={{fontSize:'14px',fontWeight:'500'}}>{e.name}</div>
-                        <div style={{fontSize:'12px',color:'var(--text-3)'}}>{e.type}{e.client ? ` · ${e.client}` : ''}</div>
-                        {e.notes && <div style={{fontSize:'12px',color:'var(--text-2)',marginTop:'4px'}}>{e.notes}</div>}
-                      </div>
-                    </div>
-                  ))
-              }
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setDayModal(null)}>Sluiten</button>
-              <button className="btn btn-primary" onClick={() => { setDayModal(null); setForm(f => ({...f, date: dayModal.date})); setAddModal(true); }}>+ Event toevoegen</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <EventDayModal
+        date={dayModal?.date ?? null}
+        events={dayModal?.events ?? []}
+        onClose={() => setDayModal(null)}
+        onAddEvent={openCreateFromDay}
+        onEventClick={openEditEvent}
+      />
 
-      {/* Add Event Modal */}
-      {addModal && (
-        <div className="modal-overlay open" onClick={() => setAddModal(false)}>
-          <div className="modal" style={{maxWidth:'460px'}} onClick={e=>e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title">Nieuw event toevoegen</div>
-              <button className="modal-close" onClick={() => setAddModal(false)}>✕</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label">Naam</label>
-                <input className="form-input" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Event naam…" />
-              </div>
-              <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginBottom:'16px'}}>
-                {TYPES.map(type => (
-                  <button key={type} onClick={() => setForm(f=>({...f,type}))}
-                    className={`type-btn${form.type===type?` active-${type.toLowerCase()}`:''}`}>{type}</button>
-                ))}
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
-                <div className="form-group">
-                  <label className="form-label">Datum</label>
-                  <input type="date" className="form-input" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Klant</label>
-                  <select className="form-input" value={form.client} onChange={e=>setForm(f=>({...f,client:e.target.value}))}>
-                    <option value="">— Kies klant —</option>
-                    {clients.map(c => <option key={c._id}>{c.name}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Notities</label>
-                <input className="form-input" value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} placeholder="Optioneel…" />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-ghost" onClick={() => setAddModal(false)}>Annuleren</button>
-              <button className="btn btn-primary" onClick={() => createMut.mutate(form)} disabled={!form.name||!form.date}>Event opslaan</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <EventFormModal
+        open={eventModalOpen}
+        onClose={closeEventModal}
+        mode={editingEventId ? 'edit' : 'create'}
+        form={form}
+        setForm={setForm}
+        clients={clients}
+        teamMembers={teamMembers}
+        saveMut={saveEventMut}
+        isTeam={isTeam}
+      />
     </section>
   );
 }

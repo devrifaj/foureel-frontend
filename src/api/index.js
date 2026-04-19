@@ -7,14 +7,53 @@ async function req(method, path, body) {
     credentials: "include",
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
+  const text = await res.text();
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { error: text.slice(0, 240) || res.statusText || "Request failed" };
+    }
+  }
+  if (!res.ok) {
+    const msg =
+      typeof data.error === "string"
+        ? data.error
+        : typeof data.message === "string"
+          ? data.message
+          : `Request failed (${res.status})`;
+    throw new Error(msg);
+  }
   return data;
 }
 
 // Auth
 export const login = (email, password) =>
   req("POST", "/auth/login", { email, password });
+export const requestClientForgotPassword = (email) =>
+  req("POST", "/auth/forgot-password", { email });
+
+export async function validateClientResetToken(token) {
+  const res = await fetch(
+    `${BASE}/auth/reset-password/validate?token=${encodeURIComponent(token)}`,
+    { credentials: "include" },
+  );
+  const text = await res.text();
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return false;
+    }
+  }
+  return Boolean(data?.valid);
+}
+
+export const submitClientPasswordReset = (payload) =>
+  req("POST", "/auth/reset-password", payload);
+
 export const logout = () => req("POST", "/auth/logout");
 export const getMe = () => req("GET", "/auth/me");
 
@@ -24,6 +63,10 @@ export const getClient = (id) => req("GET", `/clients/${id}`);
 export const createClient = (data) => req("POST", "/clients", data);
 export const updateClient = (id, data) => req("PUT", `/clients/${id}`, data);
 export const deleteClient = (id) => req("DELETE", `/clients/${id}`);
+
+// Team
+export const getTeamMembers = () => req("GET", "/team");
+export const createTeamMember = (data) => req("POST", "/team", data);
 
 // Events
 export const getEvents = () => req("GET", "/events");
@@ -92,3 +135,9 @@ export const getPulse = () => req("GET", "/pulse");
 // Video checker
 export const analyzeCheckerText = (payload) =>
   req("POST", "/checker/analyze", payload);
+
+export const presignVideoCheckerUpload = (payload) =>
+  req("POST", "/checker/upload/presign", payload);
+
+export const saveVideoCheckerRun = (payload) =>
+  req("POST", "/checker/runs", payload);

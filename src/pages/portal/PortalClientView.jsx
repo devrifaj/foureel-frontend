@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
+import { useLang } from '../../context/LangContext';
 import { getPortalMe, sendClientNote, approveVideo, requestRevision, saveQuestionnaire } from '../../api';
 
 const MONTHS_NL = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
@@ -179,6 +180,8 @@ function Questionnaire({ clientName, onSubmit }) {
 // ── PORTAL MAIN ───────────────────────────────────────────────
 export default function PortalClientView() {
   const { user, logout } = useAuth();
+  const { t } = useLang();
+  const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [note, setNote] = useState('');
   const [revisionModal, setRevisionModal] = useState(null);
   const [revisionNote, setRevisionNote] = useState('');
@@ -235,7 +238,9 @@ export default function PortalClientView() {
               📋 Vragenlijst invullen
             </button>
           )}
-          <button className="portal-logout" onClick={logout}>Uitloggen</button>
+          <button type="button" className="portal-logout" onClick={() => setLogoutModalOpen(true)}>
+            {t('logout')}
+          </button>
         </div>
       </header>
 
@@ -406,6 +411,39 @@ export default function PortalClientView() {
           </div>
         </div>
       </main>
+
+      {logoutModalOpen && (
+        <div className="modal-overlay open" onClick={() => setLogoutModalOpen(false)}>
+          <div className="modal" style={{ maxWidth: '460px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">{t('logoutConfirmTitle')}</div>
+              <button type="button" className="modal-close" onClick={() => setLogoutModalOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '14px', color: 'var(--text-2)', margin: 0, lineHeight: 1.5 }}>
+                {t('logoutConfirmBody')}
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-ghost" onClick={() => setLogoutModalOpen(false)}>
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setLogoutModalOpen(false);
+                  logout();
+                }}
+              >
+                {t('logout')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

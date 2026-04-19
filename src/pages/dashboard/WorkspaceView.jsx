@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../context/AuthContext";
+import { useLang } from "../../context/LangContext";
 import {
   getBatches,
   updateVideo,
@@ -146,6 +147,7 @@ function FaseSelect({ value, onChange }) {
 
 export default function WorkspaceView() {
   const { user } = useAuth();
+  const { t } = useLang();
   const [wsTab, setWsTab] = useState("inbox");
   const [batchId, setBatchId] = useState(null);
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -349,6 +351,16 @@ export default function WorkspaceView() {
     }
   };
 
+  const closeShotlist = async () => {
+    if (shootMode) {
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+      } catch (_) {}
+      setShootMode(false);
+    }
+    setShotVideo(null);
+  };
+
   const openSop = (video) => {
     setSopVideo(video);
     setSopDraft({
@@ -360,14 +372,29 @@ export default function WorkspaceView() {
       stijlTags: video.sop?.stijlTags || [],
     });
   };
-  const saveSop = () => {
-    if (!batch || !sopVideo || !sopDraft) return;
+  const closeSop = () => {
+    if (!batch || !sopVideo || !sopDraft) {
+      setSopVideo(null);
+      return;
+    }
     updateMut.mutate({ bId: batch._id, vId: sopVideo._id, sop: sopDraft });
     setSopVideo(null);
   };
 
-  const ratioOptions = ["9:16", "16:9", "1:1", "4:5"];
-  const styleOptions = ["Cinematic", "Fast Cuts", "Minimal", "Bold", "Story"];
+  const SOP_RATIO_OPTIONS = [
+    "9:16 Reels",
+    "16:9 YouTube",
+    "1:1 Feed",
+    "4:5 Portrait",
+  ];
+  const SOP_STIJL_OPTIONS = [
+    "Snelle cuts",
+    "Rustig & cinematisch",
+    "Tekst overlays",
+    "Voice-over",
+    "Muziek zwaar",
+    "Sfeer-gedreven",
+  ];
   const toggleTag = (key, value) => {
     if (!sopDraft) return;
     const arr = sopDraft[key] || [];
@@ -421,6 +448,393 @@ export default function WorkspaceView() {
   if (user?.role !== "team") {
     return <Navigate to="/portaal" replace />;
   }
+
+  const scriptShotSopOverlays = (
+    <>
+      {scriptVideo && (
+        <div
+          id="script-overlay"
+          className="open"
+          onMouseDown={() => setScriptVideo(null)}
+        >
+          <div id="script-box" onMouseDown={(e) => e.stopPropagation()}>
+            <div id="script-head">
+              <span style={{ fontSize: "18px", flexShrink: 0 }} aria-hidden>
+                📝
+              </span>
+              <span id="script-head-title">
+                Script — {scriptVideo.name}
+              </span>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setScriptVideo(null)}
+                aria-label="Sluiten"
+              >
+                ✕
+              </button>
+            </div>
+            <textarea
+              id="script-textarea"
+              value={scriptDraft}
+              onChange={(e) => setScriptDraft(e.target.value)}
+              placeholder={
+                "Plak of typ hier het script, de briefing of aandachtspunten voor deze video.\n\nTip: kopieer direct vanuit Google Docs of Notion."
+              }
+            />
+            <div id="script-foot">
+              <span id="script-char-count">
+                {scriptWords} woorden · {scriptDraft.length} tekens
+              </span>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setScriptVideo(null)}
+                >
+                  Annuleren
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={saveScript}
+                >
+                  Opslaan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {shotVideo && (
+        <div
+          id="sl-overlay"
+          ref={shotOverlayRef}
+          className={`open${shootMode ? " shootmode" : ""}`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) void closeShotlist();
+          }}
+        >
+          <div id="sl-box" onMouseDown={(e) => e.stopPropagation()}>
+            <div id="sl-head">
+              <span style={{ fontSize: "18px", flexShrink: 0 }} aria-hidden>
+                🎬
+              </span>
+              <span id="sl-head-title">Shotlist — {shotVideo.name}</span>
+              <div
+                id="sl-head-right"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginLeft: "auto",
+                  flexShrink: 0,
+                }}
+              >
+                <button
+                  type="button"
+                  id="sl-shootbtn"
+                  className={`sl-shootbtn${shootMode ? " on" : ""}`}
+                  onClick={toggleShootMode}
+                >
+                  {shootMode ? "✕ Sluit shoot-modus" : "⛶ Shoot-modus"}
+                </button>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={() => closeShotlist()}
+                  aria-label="Sluiten"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div id="sl-content">
+              <div id="sl-list-side">
+                {(shotVideo.shotlist || []).length > 0 && (
+                  <div id="sl-progress-wrap">
+                    <div id="sl-progress-bar">
+                      <div
+                        id="sl-progress-fill"
+                        style={{
+                          width: `${Math.round(((shotVideo.shotlist || []).filter((s) => s.done).length / Math.max((shotVideo.shotlist || []).length, 1)) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div id="sl-progress-txt">
+                      {(shotVideo.shotlist || []).filter((s) => s.done).length}/
+                      {(shotVideo.shotlist || []).length} shots geschoten ·{" "}
+                      {Math.round(
+                        ((shotVideo.shotlist || []).filter((s) => s.done).length /
+                          Math.max((shotVideo.shotlist || []).length, 1)) *
+                          100,
+                      )}
+                      %
+                    </div>
+                  </div>
+                )}
+                <div id="sl-list-wrap">
+                  <div id="sl-list">
+                    {(shotVideo.shotlist || []).length === 0 ? (
+                      <div
+                        style={{
+                          padding: "20px 24px",
+                          fontSize: "13px",
+                          color: "var(--text-3)",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        Nog geen shots. Voeg hieronder toe.
+                      </div>
+                    ) : (
+                      (shotVideo.shotlist || []).map((s, i) => (
+                        <div
+                          key={`${s.text}-${i}`}
+                          className={`sl-item${s.done ? " done" : ""}`}
+                          onClick={() => toggleShot(i)}
+                        >
+                          <div className="sl-cb">{s.done ? "✓" : ""}</div>
+                          <div className="sl-num">
+                            {String(i + 1).padStart(2, "0")}
+                          </div>
+                          <div className="sl-text">{s.text}</div>
+                          <button
+                            type="button"
+                            className="sl-del"
+                            title="Verwijderen"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeShot(i);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div id="sl-add-row">
+                  <input
+                    id="sl-add-inp"
+                    value={shotDraft}
+                    onChange={(e) => setShotDraft(e.target.value)}
+                    placeholder="Shot toevoegen, bijv: Wide shot ingang · Close-up product…"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addShot();
+                      }
+                    }}
+                  />
+                  <button type="button" id="sl-add-btn" onClick={addShot}>
+                    + Shot
+                  </button>
+                </div>
+              </div>
+              <div id="sl-script-side">
+                <div
+                  style={{
+                    padding: "14px 20px",
+                    borderBottom: "1px solid var(--border)",
+                    background: "var(--bg-alt)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <span style={{ fontSize: "16px" }} aria-hidden>
+                    📝
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "Montserrat, sans-serif",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      color: "var(--text)",
+                    }}
+                  >
+                    Script
+                  </span>
+                </div>
+                <div id="sl-script-panel">
+                  {shotVideo.script?.trim()
+                    ? shotVideo.script
+                    : "Geen script beschikbaar voor deze video.\n\nVoeg een script toe via de Script kolom in de tabel."}
+                </div>
+              </div>
+            </div>
+            <div id="sl-foot">
+              <button
+                type="button"
+                className="sl-reset-btn"
+                onClick={resetShots}
+              >
+                ↺ Reset alle vinkjes
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => closeShotlist()}
+              >
+                Sluiten
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sopVideo && sopDraft && (
+        <div
+          id="sop-overlay"
+          className="open"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeSop();
+          }}
+        >
+          <div id="sop-box" onMouseDown={(e) => e.stopPropagation()}>
+            <div id="sop-head">
+              <span style={{ fontSize: "18px", flexShrink: 0 }} aria-hidden>
+                📋
+              </span>
+              <span id="sop-head-title">SOP — {sopVideo.name}</span>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => closeSop()}
+                aria-label="Sluiten"
+              >
+                ✕
+              </button>
+            </div>
+            <div id="sop-body">
+              <div>
+                <div className="sop-card">
+                  <div className="sop-card-title">🎞 Formaat & Ratio</div>
+                  <div className="sop-tags">
+                    {SOP_RATIO_OPTIONS.map((tag) => {
+                      const on = (sopDraft.ratioTags || []).includes(tag);
+                      return (
+                        <button
+                          type="button"
+                          key={tag}
+                          className={`sop-tag${on ? " on" : ""}`}
+                          onClick={() => toggleTag("ratioTags", tag)}
+                        >
+                          {on ? "✓ " : ""}
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <label className="sop-lbl">
+                    Duur (bijv. 60s, 3 min YouTube)
+                  </label>
+                  <input
+                    className="sop-inp"
+                    id="sop-f-format"
+                    value={sopDraft.format}
+                    onChange={(e) =>
+                      setSopDraft({ ...sopDraft, format: e.target.value })
+                    }
+                    placeholder="bijv. 60s reels + 3 min YouTube"
+                  />
+                </div>
+                <div className="sop-card" style={{ marginTop: "12px" }}>
+                  <div className="sop-card-title">🎨 Stijl & Gevoel</div>
+                  <div className="sop-tags">
+                    {SOP_STIJL_OPTIONS.map((tag) => {
+                      const on = (sopDraft.stijlTags || []).includes(tag);
+                      return (
+                        <button
+                          type="button"
+                          key={tag}
+                          className={`sop-tag${on ? " on" : ""}`}
+                          onClick={() => toggleTag("stijlTags", tag)}
+                        >
+                          {on ? "✓ " : ""}
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <label className="sop-lbl">Kleurprofiel / LUT</label>
+                  <input
+                    className="sop-inp"
+                    id="sop-f-kleurprofiel"
+                    value={sopDraft.kleurprofiel}
+                    onChange={(e) =>
+                      setSopDraft({ ...sopDraft, kleurprofiel: e.target.value })
+                    }
+                    placeholder="bijv. Warm, contrastrijk — LUT: Moody_v3"
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="sop-card">
+                  <div className="sop-card-title">🎵 Muziek & Audio</div>
+                  <textarea
+                    className="sop-ta"
+                    id="sop-f-muziek"
+                    value={sopDraft.muziek}
+                    onChange={(e) =>
+                      setSopDraft({ ...sopDraft, muziek: e.target.value })
+                    }
+                    placeholder="bijv. Energiek, upbeat. Geen tekst. Artlist — zoek op: urban cinematic"
+                  />
+                </div>
+                <div className="sop-card" style={{ marginTop: "12px" }}>
+                  <div className="sop-card-title">
+                    📋 Instructies voor editor
+                  </div>
+                  <textarea
+                    className="sop-ta"
+                    id="sop-f-extraNotes"
+                    style={{ minHeight: "130px" }}
+                    value={sopDraft.extraNotes}
+                    onChange={(e) =>
+                      setSopDraft({ ...sopDraft, extraNotes: e.target.value })
+                    }
+                    placeholder={
+                      "Bijv:\n• Begin met de sterkste shot\n• Jump cuts voor energie\n• Ondertitels verplicht op reels\n• Exporteer H.264, max 100MB\n• Kleur: warm en zonnig"
+                    }
+                  />
+                </div>
+                <div
+                  style={{
+                    marginTop: "12px",
+                    padding: "10px 14px",
+                    background: "var(--accent-pale)",
+                    borderRadius: "8px",
+                    border: "1px solid var(--accent-light)",
+                    fontSize: "12px",
+                    color: "var(--text-2)",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  💡 Vul dit in voor de editfase — dan weet de editor precies wat
+                  het doel is en zijn er minder revisions.
+                </div>
+              </div>
+            </div>
+            <div id="sop-foot">
+              <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
+                Automatisch opgeslagen · Klik buiten de modal om te sluiten
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => closeSop()}
+              >
+                Sluiten
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   if (batch) {
     const done = batch.videos.filter((v) => v.editFase === "finished").length;
@@ -895,12 +1309,19 @@ export default function WorkspaceView() {
               </div>
               <div
                 className="ws-videos-head-right"
-                style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                style={{ display: "flex", alignItems: "center", gap: "10px" }}
               >
                 <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
                   {done}/{total} klaar ·{" "}
                   {Math.round((done / Math.max(total, 1)) * 100)}%
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowVideoModal(true)}
+                >
+                  + Filmpje
+                </button>
               </div>
             </div>
             <div style={{ overflowX: "auto" }}>
@@ -931,6 +1352,10 @@ export default function WorkspaceView() {
                     const shots = v.shotlist || [];
                     const done = shots.filter((s) => s.done).length;
                     const ef = FASE_MAP[v.editFase];
+                    const sopTags = [
+                      ...(v.sop?.ratioTags || []),
+                      ...(v.sop?.stijlTags || []),
+                    ];
                     return (
                       <tr key={v._id} className="ws-tr ws-vid-row">
                         <td className="ws-td">
@@ -1001,16 +1426,30 @@ export default function WorkspaceView() {
                           }
                           isLink
                         />
-                        <td className="ws-td" onClick={() => openScript(v)}>
-                          <div className="ws-td-inner">
-                            {v.script ? (
+                        <td
+                          className="ws-td"
+                          title="Script bewerken"
+                          onClick={() => openScript(v)}
+                        >
+                          <div
+                            className="ws-td-inner"
+                            style={{ cursor: "pointer", alignItems: "flex-start" }}
+                          >
+                            {v.script?.trim() ? (
                               <span
                                 style={{
-                                  fontSize: "12px",
+                                  fontSize: "11px",
                                   color: "var(--text-2)",
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                  lineHeight: 1.35,
                                 }}
                               >
-                                Open script
+                                {v.script.trim().length > 120
+                                  ? `${v.script.trim().slice(0, 120)}…`
+                                  : v.script.trim()}
                               </span>
                             ) : (
                               <span
@@ -1037,7 +1476,11 @@ export default function WorkspaceView() {
                           }
                           isLink
                         />
-                        <td className="ws-td" onClick={() => openShotlist(v)}>
+                        <td
+                          className="ws-td"
+                          title="Shotlist openen"
+                          onClick={() => openShotlist(v)}
+                        >
                           <div
                             className="ws-td-inner"
                             style={{ flexDirection: "column", gap: "3px" }}
@@ -1093,11 +1536,18 @@ export default function WorkspaceView() {
                             )}
                           </div>
                         </td>
-                        <td className="ws-td" onClick={() => openSop(v)}>
-                          <div className="ws-td-inner">
-                            {(v.sop?.ratioTags || []).slice(0, 1).map((t) => (
+                        <td
+                          className="ws-td"
+                          title="SOP bewerken"
+                          onClick={() => openSop(v)}
+                        >
+                          <div
+                            className="ws-td-inner"
+                            style={{ flexWrap: "wrap", gap: "4px" }}
+                          >
+                            {sopTags.slice(0, 2).map((t, ti) => (
                               <span
-                                key={t}
+                                key={`${t}-${ti}`}
                                 style={{
                                   fontSize: "9px",
                                   fontWeight: "700",
@@ -1110,7 +1560,14 @@ export default function WorkspaceView() {
                                 {t}
                               </span>
                             ))}
-                            {!v.sop?.ratioTags?.length && (
+                            {sopTags.length > 2 && (
+                              <span
+                                style={{ fontSize: "10px", color: "var(--text-3)" }}
+                              >
+                                +{sopTags.length - 2}
+                              </span>
+                            )}
+                            {!sopTags.length && (
                               <span
                                 style={{
                                   fontSize: "11px",
@@ -1126,6 +1583,7 @@ export default function WorkspaceView() {
                         <EditCell
                           value={v.notes}
                           placeholder="Notitie…"
+                          multiline
                           onSave={(val) =>
                             updateMut.mutate({
                               bId: batch._id,
@@ -1329,6 +1787,7 @@ export default function WorkspaceView() {
             </div>
           </div>
         )}
+        {scriptShotSopOverlays}
       </>
     );
   }
@@ -1349,7 +1808,7 @@ export default function WorkspaceView() {
             className="ws-new-btn"
             onClick={() => setShowBatchModal(true)}
           >
-            + Nieuwe batch
+            {t("wsAddWorkspace")}
           </button>
         </div>
         <div
@@ -1618,243 +2077,13 @@ export default function WorkspaceView() {
               </tbody>
             </table>
             <div className="ws-add-row" onClick={() => setShowBatchModal(true)}>
-              + Nieuwe batch aanmaken
+              {t("wsAddWorkspaceFooter")}
             </div>
           </div>
         </div>
       </section>
 
-      {scriptVideo && (
-        <div
-          id="script-overlay"
-          className="open"
-          onMouseDown={() => setScriptVideo(null)}
-        >
-          <div id="script-box" onMouseDown={(e) => e.stopPropagation()}>
-            <div id="script-head">
-              <div id="script-head-title">Script — {scriptVideo.name}</div>
-              <button
-                className="modal-close"
-                onClick={() => setScriptVideo(null)}
-              >
-                ✕
-              </button>
-            </div>
-            <textarea
-              id="script-textarea"
-              value={scriptDraft}
-              onChange={(e) => setScriptDraft(e.target.value)}
-            />
-            <div id="script-foot">
-              <div id="script-char-count">
-                {scriptWords} woorden · {scriptDraft.length} tekens
-              </div>
-              <button className="btn btn-primary btn-sm" onClick={saveScript}>
-                Opslaan
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {shotVideo && (
-        <div
-          id="sl-overlay"
-          ref={shotOverlayRef}
-          className={`open${shootMode ? " shootmode" : ""}`}
-          onMouseDown={() => setShotVideo(null)}
-        >
-          <div id="sl-box" onMouseDown={(e) => e.stopPropagation()}>
-            <div id="sl-head">
-              <div id="sl-head-title">Shotlist — {shotVideo.name}</div>
-              <button
-                className="modal-close"
-                onClick={() => setShotVideo(null)}
-              >
-                ✕
-              </button>
-            </div>
-            <div id="sl-progress-wrap">
-              <div id="sl-progress-bar">
-                <div
-                  id="sl-progress-fill"
-                  style={{
-                    width: `${Math.round(((shotVideo.shotlist || []).filter((s) => s.done).length / Math.max((shotVideo.shotlist || []).length, 1)) * 100)}%`,
-                  }}
-                />
-              </div>
-              <div id="sl-progress-txt">
-                {(shotVideo.shotlist || []).filter((s) => s.done).length}/
-                {(shotVideo.shotlist || []).length} voltooid
-              </div>
-            </div>
-            <div id="sl-content">
-              <div id="sl-list-side">
-                <div id="sl-list-wrap">
-                  {(shotVideo.shotlist || []).map((s, i) => (
-                    <div
-                      key={`${s.text}-${i}`}
-                      className={`sl-item${s.done ? " done" : ""}`}
-                      onClick={() => toggleShot(i)}
-                    >
-                      <div className="sl-cb">{s.done ? "✓" : ""}</div>
-                      <div className="sl-num">
-                        {String(i + 1).padStart(2, "0")}
-                      </div>
-                      <div className="sl-text">{s.text}</div>
-                      <button
-                        className="sl-del"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeShot(i);
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div id="sl-add-row">
-                  <input
-                    id="sl-add-inp"
-                    value={shotDraft}
-                    onChange={(e) => setShotDraft(e.target.value)}
-                    placeholder="Nieuwe shot toevoegen..."
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addShot();
-                      }
-                    }}
-                  />
-                  <button id="sl-add-btn" onClick={addShot}>
-                    Toevoegen
-                  </button>
-                </div>
-              </div>
-              <div id="sl-script-side">
-                <div
-                  style={{
-                    padding: "14px 18px",
-                    borderBottom: "1px solid var(--border)",
-                    fontWeight: 700,
-                    fontSize: "12px",
-                    letterSpacing: ".08em",
-                    textTransform: "uppercase",
-                    color: "var(--text-3)",
-                  }}
-                >
-                  Script
-                </div>
-                <div id="sl-script-panel">
-                  {shotVideo.script ||
-                    "Geen script toegevoegd voor deze video."}
-                </div>
-              </div>
-            </div>
-            <div id="sl-foot">
-              <button
-                className={`sl-shootbtn${shootMode ? " on" : ""}`}
-                onClick={toggleShootMode}
-              >
-                🎬 Shoot Mode
-              </button>
-              <button className="sl-reset-btn" onClick={resetShots}>
-                Reset checks
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {sopVideo && sopDraft && (
-        <div
-          id="sop-overlay"
-          className="open"
-          onMouseDown={() => setSopVideo(null)}
-        >
-          <div id="sop-box" onMouseDown={(e) => e.stopPropagation()}>
-            <div id="sop-head">
-              <div id="sop-head-title">SOP — {sopVideo.name}</div>
-              <button className="modal-close" onClick={() => setSopVideo(null)}>
-                ✕
-              </button>
-            </div>
-            <div id="sop-body">
-              <div className="sop-card">
-                <div className="sop-card-title">Format & Stijl</div>
-                <label className="sop-lbl">Ratio tags</label>
-                <div className="sop-tags">
-                  {ratioOptions.map((tag) => (
-                    <button
-                      key={tag}
-                      className={`sop-tag${(sopDraft.ratioTags || []).includes(tag) ? " on" : ""}`}
-                      onClick={() => toggleTag("ratioTags", tag)}
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
-                <label className="sop-lbl">Stijl tags</label>
-                <div className="sop-tags">
-                  {styleOptions.map((tag) => (
-                    <button
-                      key={tag}
-                      className={`sop-tag${(sopDraft.stijlTags || []).includes(tag) ? " on" : ""}`}
-                      onClick={() => toggleTag("stijlTags", tag)}
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
-                <label className="sop-lbl">Kleurprofiel</label>
-                <input
-                  className="sop-inp"
-                  value={sopDraft.kleurprofiel}
-                  onChange={(e) =>
-                    setSopDraft({ ...sopDraft, kleurprofiel: e.target.value })
-                  }
-                />
-              </div>
-              <div className="sop-card">
-                <div className="sop-card-title">Instructies</div>
-                <label className="sop-lbl">Muziek</label>
-                <input
-                  className="sop-inp"
-                  value={sopDraft.muziek}
-                  onChange={(e) =>
-                    setSopDraft({ ...sopDraft, muziek: e.target.value })
-                  }
-                />
-                <label className="sop-lbl">Extra editor notes</label>
-                <textarea
-                  className="sop-ta"
-                  value={sopDraft.extraNotes}
-                  onChange={(e) =>
-                    setSopDraft({ ...sopDraft, extraNotes: e.target.value })
-                  }
-                />
-                <label className="sop-lbl">Format notitie</label>
-                <textarea
-                  className="sop-ta"
-                  value={sopDraft.format}
-                  onChange={(e) =>
-                    setSopDraft({ ...sopDraft, format: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div id="sop-foot">
-              <span style={{ fontSize: "12px", color: "var(--text-3)" }}>
-                SOP wordt opgeslagen per video.
-              </span>
-              <button className="btn btn-primary btn-sm" onClick={saveSop}>
-                Opslaan
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {scriptShotSopOverlays}
 
       {showBatchModal && (
         <div
@@ -2011,16 +2240,29 @@ function EditCell({
 
   if (editing) {
     return (
-      <td className="ws-td">
+      <td
+        className="ws-td"
+        style={
+          multiline
+            ? { height: "auto", minHeight: 48, verticalAlign: "top" }
+            : undefined
+        }
+      >
         {multiline ? (
           <textarea
             autoFocus
             value={val}
             onChange={(e) => setVal(e.target.value)}
             onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setVal(value || "");
+                setEditing(false);
+              }
+            }}
             style={{
               width: "100%",
-              minHeight: "60px",
+              minHeight: "72px",
               border: "1.5px solid var(--accent)",
               borderRadius: "5px",
               padding: "5px 8px",

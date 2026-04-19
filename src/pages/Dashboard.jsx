@@ -1,17 +1,86 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { DASHBOARD_BASE } from '../paths';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
-import { getTasks } from '../api';
+import { getTasks, getTeamMembers, createTeamMember } from '../api';
 
-const TEAM = [
-  { name: 'Paolo', role: 'Creative Dir.', ini: 'P', avClass: 'av-P' },
-  { name: 'Lex', role: 'Editor', ini: 'L', avClass: 'av-L' },
-  { name: 'Rick', role: 'Accounts', ini: 'R', avClass: 'av-R' },
-  { name: 'Ray', role: 'Strategy', ini: 'Ra', avClass: 'av-Ra' },
-  { name: 'Boy', role: 'Owner', ini: 'B', avClass: 'av-B' },
-];
+const DEFAULT_MEMBER_FORM = {
+  email: '',
+  password: '',
+  name: '',
+  teamRole: '',
+  initials: '',
+  color: '#C8953A',
+};
+
+const TEAM_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const teamMemberErrBorder = {
+  borderColor: 'var(--accent)',
+  boxShadow: '0 0 0 1px var(--accent)',
+};
+
+function validateTeamMemberForm(form, t) {
+  const errors = {};
+  const email = form.email.trim();
+  if (!email) errors.email = t('teamValEmailRequired');
+  else if (!TEAM_EMAIL_REGEX.test(email)) errors.email = t('teamValEmailInvalid');
+
+  const pw = typeof form.password === 'string' ? form.password.trim() : '';
+  if (!pw) errors.password = t('teamValPasswordRequired');
+  else if (pw.length < 8) errors.password = t('teamValPasswordLength');
+
+  const name = form.name.trim();
+  if (!name) errors.name = t('teamValNameRequired');
+
+  const teamRole = typeof form.teamRole === 'string' ? form.teamRole.trim() : '';
+  if (!teamRole) errors.teamRole = t('teamValRoleRequired');
+
+  return errors;
+}
+
+function mapTeamMemberApiError(message, t) {
+  const out = {};
+  if (!message) {
+    out._general = t('teamCreateError');
+    return out;
+  }
+  const m = message.toLowerCase();
+  if (m.includes('already in use') || (m.includes('email') && m.includes('in use'))) {
+    out.email = t('teamValEmailTaken');
+  } else if (m.includes('valid email')) {
+    out.email = t('teamValEmailInvalid');
+  } else if (m.includes('password') && (m.includes('8') || m.includes('least'))) {
+    out.password = t('teamValPasswordLength');
+  } else if (m.includes('name') && m.includes('required')) {
+    out.name = t('teamValNameRequired');
+  } else if (m.includes('role') && m.includes('required')) {
+    out.teamRole = t('teamValRoleRequired');
+  } else {
+    out._general = message;
+  }
+  return out;
+}
+
+/** Matches default seeded team size; stretches if cached list is longer (refetch / placeholder). */
+const DEFAULT_TEAM_SKELETON_COUNT = 5;
+const TEAM_SKELETON_LINE_WIDTHS = ['78%', '92%', '68%', '85%', '74%', '88%', '70%', '90%'];
+
+function TeamListSkeletonRows({ count }) {
+  return Array.from({ length: count }, (_, i) => (
+    <div key={`team-skel-${i}`} className="team-member-pill team-member-pill--skeleton" aria-hidden>
+      <div className="avatar team-skeleton-avatar team-skeleton-shimmer" />
+      <span className="team-member-pill-text team-member-pill-text--skeleton">
+        <span
+          className="team-skeleton-line team-skeleton-shimmer"
+          style={{ width: TEAM_SKELETON_LINE_WIDTHS[i % TEAM_SKELETON_LINE_WIDTHS.length] }}
+        />
+      </span>
+    </div>
+  ));
+}
 
 /** SVG nav icons — matches 4reel-dashboard.html */
 const NavIcons = {
@@ -93,31 +162,95 @@ const NAV_SECTIONS = [
     items: [
       { id: 'workspace', iconKey: 'workspace', labelKey: 'workspace' },
       { id: 'checker', iconKey: 'checker', labelKey: 'checker' },
-      { id: 'pulse', iconKey: 'pulse', labelKey: 'pulse', pulseAccent: true },
+      { id: 'pulse', iconKey: 'pulse', labelKey: 'pulse' },
     ],
   },
 ];
 
 const NAV_TO = {
-  home: '/',
-  agenda: '/agenda',
-  klanten: '/klanten',
-  taken: '/taken',
-  archief: '/archief',
-  workspace: '/workspace',
-  checker: '/checker',
-  pulse: '/pulse',
+  home: DASHBOARD_BASE,
+  agenda: `${DASHBOARD_BASE}/agenda`,
+  klanten: `${DASHBOARD_BASE}/klanten`,
+  taken: `${DASHBOARD_BASE}/taken`,
+  archief: `${DASHBOARD_BASE}/archief`,
+  workspace: `${DASHBOARD_BASE}/workspace`,
+  checker: `${DASHBOARD_BASE}/checker`,
+  pulse: `${DASHBOARD_BASE}/pulse`,
 };
 
 export default function Dashboard() {
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const [memberForm, setMemberForm] = useState(DEFAULT_MEMBER_FORM);
+  const [memberFormErrors, setMemberFormErrors] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { logout, user } = useAuth();
   const { lang, setLang, t } = useLang();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const isTeamUser = user?.role === 'team';
 
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks'], queryFn: getTasks });
+  const {
+    data: teamMembers = [],
+    isLoading: teamLoading,
+    isError: teamError,
+  } = useQuery({
+    queryKey: ['team'],
+    queryFn: getTeamMembers,
+    enabled: Boolean(user && isTeamUser),
+    placeholderData: (previousData) => previousData,
+  });
+
+  const showTeamListSkeleton = teamLoading && !teamError;
+  const teamSkeletonRowCount = showTeamListSkeleton
+    ? Math.max(DEFAULT_TEAM_SKELETON_COUNT, teamMembers.length)
+    : 0;
+
+  const createMemberMut = useMutation({
+    mutationFn: createTeamMember,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team'] });
+      setMemberForm(DEFAULT_MEMBER_FORM);
+      setMemberFormErrors({});
+      setAddMemberOpen(false);
+    },
+    onError: (error) => {
+      setMemberFormErrors(mapTeamMemberApiError(error?.message || '', t));
+    },
+  });
+
+  const patchMemberForm = (field, value) => {
+    setMemberForm((f) => ({ ...f, [field]: value }));
+    setMemberFormErrors((prev) => {
+      if (!prev[field] && !prev._general) return prev;
+      const next = { ...prev };
+      delete next[field];
+      delete next._general;
+      return next;
+    });
+  };
+
+  const openAddMemberModal = () => {
+    createMemberMut.reset();
+    setMemberForm({ ...DEFAULT_MEMBER_FORM });
+    setMemberFormErrors({});
+    setAddMemberOpen(true);
+  };
+
+  const handleSubmitTeamMember = () => {
+    const errors = validateTeamMemberForm(memberForm, t);
+    setMemberFormErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    createMemberMut.mutate({
+      email: memberForm.email.trim(),
+      password: memberForm.password.trim(),
+      name: memberForm.name.trim(),
+      teamRole: memberForm.teamRole.trim(),
+      initials: memberForm.initials.trim(),
+      color: memberForm.color,
+    });
+  };
   const openCount = tasks.filter((task) => task.column !== 'klaar').length;
   const visibleSections = NAV_SECTIONS
     .map((section) => ({
@@ -194,9 +327,7 @@ export default function Dashboard() {
                   to={NAV_TO[item.id]}
                   end={item.id === 'home'}
                   onClick={() => setSidebarOpen(false)}
-                  className={({ isActive }) =>
-                    `nav-item${isActive ? ' active' : ''}${item.pulseAccent ? ' nav-item--pulse' : ''}`
-                  }
+                  className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
                 >
                   {NavIcons[item.iconKey]}
                   {t(item.labelKey)}
@@ -227,17 +358,257 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="nav-section-label sidebar-team-heading">{t('team')}</div>
-          {TEAM.map((m) => (
-            <div key={m.name} className="team-member-pill" title={`${m.name} — ${m.role}`}>
-              <div className={`avatar ${m.avClass}`}>{m.ini}</div>
-              {m.name} · {m.role}
+          <div className="sidebar-team-panel">
+            <div className="sidebar-team-scroll" aria-busy={showTeamListSkeleton}>
+              {teamError ? (
+                <div className="sidebar-team-msg" role="alert">
+                  {t('teamLoadError')}
+                </div>
+              ) : null}
+              {showTeamListSkeleton ? (
+                <TeamListSkeletonRows count={teamSkeletonRowCount} />
+              ) : null}
+              {!showTeamListSkeleton && !teamError
+                ? teamMembers.map((m) => (
+                    <div
+                      key={m._id}
+                      className="team-member-pill"
+                      title={`${m.name}${m.teamRole ? ` — ${m.teamRole}` : ''}`}
+                    >
+                      <div
+                        className="avatar"
+                        style={{
+                          backgroundColor: m.color || 'var(--accent)',
+                          color: '#faf7f2',
+                        }}
+                      >
+                        {(m.initials || m.name?.[0] || '?').slice(0, 3)}
+                      </div>
+                      <span className="team-member-pill-text">
+                        {m.name}
+                        {m.teamRole ? ` · ${m.teamRole}` : ''}
+                      </span>
+                    </div>
+                  ))
+                : null}
             </div>
-          ))}
+            <button
+              type="button"
+              className={`sidebar-add-member${showTeamListSkeleton ? ' sidebar-add-member--skeleton' : ''}`}
+              onClick={openAddMemberModal}
+            >
+              {showTeamListSkeleton ? (
+                <>
+                  <span className="sidebar-add-member-skel-icon team-skeleton-shimmer" aria-hidden />
+                  <span className="sidebar-add-member-skel-text team-skeleton-shimmer" aria-hidden />
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="sidebar-add-member-icon"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                    strokeLinecap="round"
+                    aria-hidden
+                  >
+                    <path d="M8 3v10M3 8h10" />
+                  </svg>
+                  {t('addTeamMember')}
+                </>
+              )}
+            </button>
+          </div>
           <button type="button" className="sidebar-logout" onClick={() => setLogoutModalOpen(true)}>
+            <svg
+              className="sidebar-logout-icon"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M2.5 3.5v9M2.5 3.5H6.5M2.5 12.5H6.5" />
+              <path d="M9 8h4.5" />
+              <path d="M11.5 5.5 14 8 11.5 10.5" />
+            </svg>
             {t('logout')}
           </button>
         </div>
       </nav>
+
+      {addMemberOpen && (
+        <div className="modal-overlay open" onClick={() => setAddMemberOpen(false)}>
+          <div className="modal" style={{ maxWidth: '460px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">{t('addTeamMemberTitle')}</div>
+              <button type="button" className="modal-close" onClick={() => setAddMemberOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label" htmlFor="team-add-email">
+                  {t('teamEmailLabel')}
+                </label>
+                <input
+                  id="team-add-email"
+                  type="email"
+                  className="form-input"
+                  autoComplete="off"
+                  value={memberForm.email}
+                  onChange={(e) => patchMemberForm('email', e.target.value)}
+                  placeholder={t('portalEmailPlaceholder')}
+                  style={memberFormErrors.email ? teamMemberErrBorder : undefined}
+                  aria-invalid={Boolean(memberFormErrors.email)}
+                  aria-describedby={memberFormErrors.email ? 'team-add-email-err' : undefined}
+                />
+                {memberFormErrors.email ? (
+                  <div id="team-add-email-err" className="form-field-error" role="alert">
+                    {memberFormErrors.email}
+                  </div>
+                ) : null}
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="team-add-password">
+                  {t('teamPasswordLabel')}
+                </label>
+                <input
+                  id="team-add-password"
+                  type="password"
+                  className="form-input"
+                  autoComplete="new-password"
+                  value={memberForm.password}
+                  onChange={(e) => patchMemberForm('password', e.target.value)}
+                  placeholder={t('teamPasswordHint')}
+                  style={memberFormErrors.password ? teamMemberErrBorder : undefined}
+                  aria-invalid={Boolean(memberFormErrors.password)}
+                  aria-describedby={memberFormErrors.password ? 'team-add-password-err' : undefined}
+                />
+                {memberFormErrors.password ? (
+                  <div id="team-add-password-err" className="form-field-error" role="alert">
+                    {memberFormErrors.password}
+                  </div>
+                ) : null}
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="team-add-name">
+                  {t('teamNameLabel')}
+                </label>
+                <input
+                  id="team-add-name"
+                  type="text"
+                  className="form-input"
+                  value={memberForm.name}
+                  onChange={(e) => patchMemberForm('name', e.target.value)}
+                  style={memberFormErrors.name ? teamMemberErrBorder : undefined}
+                  aria-invalid={Boolean(memberFormErrors.name)}
+                  aria-describedby={memberFormErrors.name ? 'team-add-name-err' : undefined}
+                />
+                {memberFormErrors.name ? (
+                  <div id="team-add-name-err" className="form-field-error" role="alert">
+                    {memberFormErrors.name}
+                  </div>
+                ) : null}
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="team-add-role">
+                  {t('teamRoleLabel')}
+                </label>
+                <input
+                  id="team-add-role"
+                  type="text"
+                  className="form-input"
+                  value={memberForm.teamRole}
+                  onChange={(e) => patchMemberForm('teamRole', e.target.value)}
+                  style={memberFormErrors.teamRole ? teamMemberErrBorder : undefined}
+                  aria-invalid={Boolean(memberFormErrors.teamRole)}
+                  aria-describedby={memberFormErrors.teamRole ? 'team-add-role-err' : undefined}
+                />
+                {memberFormErrors.teamRole ? (
+                  <div id="team-add-role-err" className="form-field-error" role="alert">
+                    {memberFormErrors.teamRole}
+                  </div>
+                ) : null}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" htmlFor="team-add-initials">
+                    {t('teamInitialsLabel')}
+                  </label>
+                  <input
+                    id="team-add-initials"
+                    type="text"
+                    className="form-input"
+                    maxLength={4}
+                    value={memberForm.initials}
+                    onChange={(e) => patchMemberForm('initials', e.target.value)}
+                    style={memberFormErrors.initials ? teamMemberErrBorder : undefined}
+                    aria-invalid={Boolean(memberFormErrors.initials)}
+                    aria-describedby={memberFormErrors.initials ? 'team-add-initials-err' : undefined}
+                  />
+                  {memberFormErrors.initials ? (
+                    <div id="team-add-initials-err" className="form-field-error" role="alert">
+                      {memberFormErrors.initials}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" htmlFor="team-add-color">
+                    {t('teamColorLabel')}
+                  </label>
+                  <input
+                    id="team-add-color"
+                    type="color"
+                    className="form-input"
+                    style={{
+                      height: '40px',
+                      padding: '4px',
+                      cursor: 'pointer',
+                      ...(memberFormErrors.color ? teamMemberErrBorder : {}),
+                    }}
+                    value={memberForm.color}
+                    onChange={(e) => patchMemberForm('color', e.target.value)}
+                    aria-invalid={Boolean(memberFormErrors.color)}
+                    aria-describedby={memberFormErrors.color ? 'team-add-color-err' : undefined}
+                  />
+                  {memberFormErrors.color ? (
+                    <div id="team-add-color-err" className="form-field-error" role="alert">
+                      {memberFormErrors.color}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+              {memberFormErrors._general ? (
+                <div className="form-field-error" role="alert" style={{ marginTop: '4px' }}>
+                  {memberFormErrors._general}
+                </div>
+              ) : null}
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setAddMemberOpen(false)}
+                disabled={createMemberMut.isPending}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={createMemberMut.isPending}
+                onClick={handleSubmitTeamMember}
+              >
+                {createMemberMut.isPending ? t('teamLoading') : t('save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {logoutModalOpen && (
         <div className="modal-overlay open" onClick={() => setLogoutModalOpen(false)}>

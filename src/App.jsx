@@ -12,9 +12,19 @@ import WorkspaceView from './pages/dashboard/WorkspaceView';
 import PulseView from './pages/dashboard/PulseView';
 import VideoCheckerView from './pages/dashboard/VideoCheckerView';
 import Portal from './pages/Portal';
+import LoginPage from './pages/LoginPage';
+import { DASHBOARD_BASE } from './paths';
 import './styles/global.css';
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30000 } } });
+
+function FullScreenBrand() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg)' }}>
+      <div style={{ fontFamily: 'Montserrat', fontSize: '24px', fontWeight: '600', color: 'var(--accent)' }}>4REEL</div>
+    </div>
+  );
+}
 
 function TeamOnlyRoute({ user, children }) {
   if (user?.role !== 'team') {
@@ -23,32 +33,41 @@ function TeamOnlyRoute({ user, children }) {
   return children;
 }
 
+/** `/login`: show form when logged out; send logged-in users to the right app area. */
+function LoginRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <FullScreenBrand />;
+  if (user?.role === 'client') return <Navigate to="/portaal" replace />;
+  if (user?.role === 'team') return <Navigate to={DASHBOARD_BASE} replace />;
+  return <LoginPage />;
+}
+
 function AppRoutes() {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'var(--bg)' }}>
-      <div style={{ fontFamily:'Montserrat', fontSize:'24px', fontWeight:'600', color:'var(--accent)' }}>4REEL</div>
-    </div>
-  );
+  if (loading) return <FullScreenBrand />;
   const role = user?.role;
+
   if (!user) {
     return (
       <Routes>
-        <Route path="/portaal/*" element={<Portal />} />
-        <Route path="/*" element={<Navigate to="/portaal" replace />} />
+        <Route path="/login" element={<LoginRoute />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
   }
+
   return (
     <Routes>
+      <Route path="/login" element={<LoginRoute />} />
       <Route path="/portaal/*" element={<Portal />} />
       <Route
-        path="/"
+        path={`${DASHBOARD_BASE}/*`}
         element={role === 'client' ? <Navigate to="/portaal" replace /> : <Dashboard />}
       >
         <Route index element={<HomeView />} />
         <Route path="agenda" element={<AgendaView />} />
         <Route path="klanten" element={<KlantenView />} />
+        <Route path="klanten/:clientId" element={<KlantenView />} />
         <Route path="taken" element={<TakenView />} />
         <Route path="archief" element={<ArchiefView />} />
         <Route
@@ -69,8 +88,10 @@ function AppRoutes() {
         />
         <Route path="checker" element={<VideoCheckerView />} />
         <Route path="pulse" element={<PulseView />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to={DASHBOARD_BASE} replace />} />
       </Route>
+      <Route path="/" element={<Navigate to={role === 'client' ? '/portaal' : DASHBOARD_BASE} replace />} />
+      <Route path="*" element={<Navigate to={role === 'client' ? '/portaal' : DASHBOARD_BASE} replace />} />
     </Routes>
   );
 }

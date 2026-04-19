@@ -1,6 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { createWorker } from "tesseract.js";
-import { analyzeCheckerText } from "../../api";
+import {
+  analyzeCheckerText,
+  presignVideoCheckerUpload,
+  saveVideoCheckerRun,
+} from "../../api";
 
 const MAX_FRAMES = 12;
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
@@ -196,6 +200,71 @@ export default function VideoCheckerView() {
       }
 
       setResults(all);
+      setProgressText("Check afgerond");
+
+      const video = videoRef.current;
+      const durationSec =
+        video && Number.isFinite(video.duration) ? video.duration : undefined;
+
+      const framesForDb = all.map(({ idx, timestamp, text, errors }) => ({
+        idx,
+        timestamp,
+        text: text || "",
+        errors: errors || [],
+      }));
+      const errTotal = framesForDb.reduce(
+        (sum, row) => sum + (row.errors?.length || 0),
+        0,
+      );
+      const cleanTotal = framesForDb.filter(
+        (row) => (row.errors?.length || 0) === 0,
+      ).length;
+
+      setProgressText("Video uploaden & opslaan…");
+      pushLog("Voorbereiden upload naar opslag…", "info");
+
+      const { uploadUrl, key, videoUrl, contentType: signedType } =
+        await presignVideoCheckerUpload({
+          filename: videoFile.name,
+          contentType: videoFile.type || "application/octet-stream",
+        });
+
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        body: videoFile,
+        headers: {
+          "Content-Type": signedType || videoFile.type || "application/octet-stream",
+        },
+      });
+      if (!putRes.ok) {
+        pushLog(
+          `Upload mislukt (${putRes.status}). Resultaten zijn wel lokaal zichtbaar.`,
+          "err",
+        );
+        return;
+      }
+
+      await saveVideoCheckerRun({
+        s3Key: key,
+        videoUrl,
+        videoOriginalName: videoFile.name,
+        videoContentType: videoFile.type || undefined,
+        videoSizeBytes: videoFile.size,
+        durationSec,
+        settings: {
+          intervalSec,
+          lang,
+          mode,
+        },
+        summary: {
+          frameCount: framesForDb.length,
+          errorCount: errTotal,
+          cleanCount: cleanTotal,
+        },
+        frames: framesForDb,
+      });
+
+      pushLog("Video en check-rapport opgeslagen in database.", "ok");
       setProgressText("Check afgerond");
     } catch (err) {
       pushLog(err?.message || "Check mislukt", "err");
