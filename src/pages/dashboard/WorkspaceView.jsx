@@ -15,80 +15,80 @@ import {
 } from "../../api";
 
 const FASE_MAP = {
-  tentative: { label: "Tentative", cls: "ws-ef-tentative", group: "intern" },
+  tentative: { labelKey: "wsFase_tentative", cls: "ws-ef-tentative", group: "intern" },
   spotting: {
-    label: "Spotting Footage",
+    labelKey: "wsFase_spotting",
     cls: "ws-ef-spotting",
     group: "intern",
   },
   inprogress: {
-    label: "In Progress",
+    labelKey: "wsFase_inprogress",
     cls: "ws-ef-inprogress",
     group: "intern",
   },
-  ready: { label: "Ready to Edit", cls: "ws-ef-ready", group: "intern" },
+  ready: { labelKey: "wsFase_ready", cls: "ws-ef-ready", group: "intern" },
   intern_review: {
-    label: "Intern Review",
+    labelKey: "wsFase_intern_review",
     cls: "ws-ef-waitreview",
     group: "intern",
   },
   intern_approved: {
-    label: "Intern Goedgekeurd ✓",
+    labelKey: "wsFase_intern_approved",
     cls: "ws-ef-uploaddrive",
     group: "intern",
   },
   waitreview: {
-    label: "Stuur naar klant →",
+    labelKey: "wsFase_waitreview",
     cls: "ws-ef-waitreview",
     group: "client",
   },
   client_review: {
-    label: "In review bij klant",
+    labelKey: "wsFase_client_review",
     cls: "ws-ef-feedbackrdy",
     group: "client",
   },
   client_revision: {
-    label: "Revisie aangevraagd",
+    labelKey: "wsFase_client_revision",
     cls: "ws-ef-spotting",
     group: "client",
   },
   client_approved: {
-    label: "Goedgekeurd door klant ✓",
+    labelKey: "wsFase_client_approved",
     cls: "ws-ef-finished",
     group: "client",
   },
   uploaddrive: {
-    label: "Upload to Drive",
+    labelKey: "wsFase_uploaddrive",
     cls: "ws-ef-uploaddrive",
     group: "done",
   },
-  finished: { label: "Finished ✓", cls: "ws-ef-finished", group: "done" },
+  finished: { labelKey: "wsFase_finished", cls: "ws-ef-finished", group: "done" },
 };
 
 const GROUPS = [
-  { key: "intern", label: "── Intern ──" },
-  { key: "client", label: "── Klant ──" },
-  { key: "done", label: "── Afronden ──" },
+  { key: "intern", labelKey: "wsGroup_intern" },
+  { key: "client", labelKey: "wsGroup_client" },
+  { key: "done", labelKey: "wsGroup_done" },
 ];
 const WS_TABS = [
-  { key: "inbox", label: "Project Inbox", icon: "📥" },
-  { key: "stage", label: "Project Stage", icon: "🎯" },
-  { key: "deadlines", label: "Posting Deadlines", icon: "📅" },
-  { key: "shoots", label: "Scheduled Shoots", icon: "🎬" },
-  { key: "month", label: "Month View", icon: "🗓" },
+  { key: "inbox", labelKey: "wsTab_inbox", icon: "📥" },
+  { key: "stage", labelKey: "wsTab_stage", icon: "🎯" },
+  { key: "deadlines", labelKey: "wsTab_deadlines", icon: "📅" },
+  { key: "shoots", labelKey: "wsTab_shoots", icon: "🎬" },
+  { key: "month", labelKey: "wsTab_month", icon: "🗓" },
 ];
 const SHOOT_STATUS_MAP = {
-  wrapped: { label: "Wrapped", cls: "ws-ss-wrapped" },
-  tentative: { label: "Tentative", cls: "ws-ss-tentative" },
-  waiting: { label: "Waiting on Client", cls: "ws-ss-waiting" },
-  planned: { label: "Planned", cls: "ws-ss-planned" },
+  wrapped: { labelKey: "wsShoot_wrapped", cls: "ws-ss-wrapped" },
+  tentative: { labelKey: "wsShoot_tentative", cls: "ws-ss-tentative" },
+  waiting: { labelKey: "wsShoot_waiting", cls: "ws-ss-waiting" },
+  planned: { labelKey: "wsShoot_planned", cls: "ws-ss-planned" },
 };
 const PROJECT_STAGE_MAP = {
-  development: { label: "Development", cls: "ws-ps-development" },
-  preproduction: { label: "Pre-Production", cls: "ws-ps-preproduction" },
-  shooting: { label: "Shooting", cls: "ws-ps-shooting" },
-  "post-production": { label: "Post-Production", cls: "ws-ps-postproduction" },
-  completed: { label: "Completed", cls: "ws-ps-completed" },
+  development: { labelKey: "wsStage_development", cls: "ws-ps-development" },
+  preproduction: { labelKey: "wsStage_preproduction", cls: "ws-ps-preproduction" },
+  shooting: { labelKey: "wsStage_shooting", cls: "ws-ps-shooting" },
+  "post-production": { labelKey: "wsStage_postproduction", cls: "ws-ps-postproduction" },
+  completed: { labelKey: "wsStage_completed", cls: "ws-ps-completed" },
 };
 const AV_COLORS = {
   Paolo: "var(--accent)",
@@ -105,15 +105,16 @@ const AV_INIT = {
   Boy: "B",
 };
 const WS_RES_TABS = [
-  { key: "scripts", label: "Scripts & Docs", icon: "📄" },
-  { key: "props", label: "Props", icon: "🎭" },
-  { key: "cast", label: "Cast", icon: "👤" },
-  { key: "shotlist", label: "Shotlist", icon: "🎬" },
-  { key: "moodboard", label: "Moodboard & Refs", icon: "🖼️" },
-  { key: "interview", label: "Interview vragen", icon: "💬" },
+  { key: "scripts", labelKey: "wsRes_scripts", icon: "📄" },
+  { key: "props", labelKey: "wsRes_props", icon: "🎭" },
+  { key: "cast", labelKey: "wsRes_cast", icon: "👤" },
+  { key: "shotlist", labelKey: "wsRes_shotlist", icon: "🎬" },
+  { key: "moodboard", labelKey: "wsRes_moodboard", icon: "🖼️" },
+  { key: "interview", labelKey: "wsRes_interview", icon: "💬" },
 ];
 
 function FaseSelect({ value, onChange }) {
+  const { t } = useLang();
   return (
     <select
       value={value}
@@ -131,12 +132,12 @@ function FaseSelect({ value, onChange }) {
       }}
     >
       {GROUPS.map((g) => (
-        <optgroup key={g.key} label={g.label}>
+        <optgroup key={g.key} label={t(g.labelKey)}>
           {Object.entries(FASE_MAP)
             .filter(([, m]) => m.group === g.key)
             .map(([k, m]) => (
               <option key={k} value={k}>
-                {m.label}
+                {t(m.labelKey)}
               </option>
             ))}
         </optgroup>
@@ -147,7 +148,7 @@ function FaseSelect({ value, onChange }) {
 
 export default function WorkspaceView() {
   const { user } = useAuth();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [wsTab, setWsTab] = useState("inbox");
   const [batchId, setBatchId] = useState(null);
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -211,7 +212,8 @@ export default function WorkspaceView() {
     if (!isoDate) return "—";
     const dt = new Date(isoDate);
     if (Number.isNaN(dt.getTime())) return "—";
-    return new Intl.DateTimeFormat("nl-NL", {
+    const locale = lang === "en" ? "en-GB" : "nl-NL";
+    return new Intl.DateTimeFormat(locale, {
       month: "short",
       day: "numeric",
     }).format(dt);
@@ -382,18 +384,18 @@ export default function WorkspaceView() {
   };
 
   const SOP_RATIO_OPTIONS = [
-    "9:16 Reels",
-    "16:9 YouTube",
-    "1:1 Feed",
-    "4:5 Portrait",
+    t("wsRatio_reels"),
+    t("wsRatio_youtube"),
+    t("wsRatio_feed"),
+    t("wsRatio_portrait"),
   ];
   const SOP_STIJL_OPTIONS = [
-    "Snelle cuts",
-    "Rustig & cinematisch",
-    "Tekst overlays",
-    "Voice-over",
-    "Muziek zwaar",
-    "Sfeer-gedreven",
+    t("wsStyle_fastcuts"),
+    t("wsStyle_cinematic"),
+    t("wsStyle_textoverlays"),
+    t("wsStyle_voiceover"),
+    t("wsStyle_musicheavy"),
+    t("wsStyle_mooddriven"),
   ];
   const toggleTag = (key, value) => {
     if (!sopDraft) return;
@@ -463,13 +465,13 @@ export default function WorkspaceView() {
                 📝
               </span>
               <span id="script-head-title">
-                Script — {scriptVideo.name}
+                {t("script")} — {scriptVideo.name}
               </span>
               <button
                 type="button"
                 className="modal-close"
                 onClick={() => setScriptVideo(null)}
-                aria-label="Sluiten"
+                aria-label={t("close")}
               >
                 ✕
               </button>
@@ -479,12 +481,12 @@ export default function WorkspaceView() {
               value={scriptDraft}
               onChange={(e) => setScriptDraft(e.target.value)}
               placeholder={
-                "Plak of typ hier het script, de briefing of aandachtspunten voor deze video.\n\nTip: kopieer direct vanuit Google Docs of Notion."
+                t("wsScriptPlaceholder")
               }
             />
             <div id="script-foot">
               <span id="script-char-count">
-                {scriptWords} woorden · {scriptDraft.length} tekens
+                {t("wsScriptStats", { words: scriptWords, chars: scriptDraft.length })}
               </span>
               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <button
@@ -492,14 +494,14 @@ export default function WorkspaceView() {
                   className="btn btn-ghost btn-sm"
                   onClick={() => setScriptVideo(null)}
                 >
-                  Annuleren
+                  {t("cancel")}
                 </button>
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
                   onClick={saveScript}
                 >
-                  Opslaan
+                  {t("save")}
                 </button>
               </div>
             </div>
@@ -521,7 +523,7 @@ export default function WorkspaceView() {
               <span style={{ fontSize: "18px", flexShrink: 0 }} aria-hidden>
                 🎬
               </span>
-              <span id="sl-head-title">Shotlist — {shotVideo.name}</span>
+              <span id="sl-head-title">{t("shotlist")} — {shotVideo.name}</span>
               <div
                 id="sl-head-right"
                 style={{
@@ -538,13 +540,13 @@ export default function WorkspaceView() {
                   className={`sl-shootbtn${shootMode ? " on" : ""}`}
                   onClick={toggleShootMode}
                 >
-                  {shootMode ? "✕ Sluit shoot-modus" : "⛶ Shoot-modus"}
+                  {shootMode ? t("wsCloseShootMode") : t("shootMode")}
                 </button>
                 <button
                   type="button"
                   className="modal-close"
                   onClick={() => closeShotlist()}
-                  aria-label="Sluiten"
+                  aria-label={t("close")}
                 >
                   ✕
                 </button>
@@ -564,7 +566,7 @@ export default function WorkspaceView() {
                     </div>
                     <div id="sl-progress-txt">
                       {(shotVideo.shotlist || []).filter((s) => s.done).length}/
-                      {(shotVideo.shotlist || []).length} shots geschoten ·{" "}
+                      {(shotVideo.shotlist || []).length} {t("wsShotsDone")} ·{" "}
                       {Math.round(
                         ((shotVideo.shotlist || []).filter((s) => s.done).length /
                           Math.max((shotVideo.shotlist || []).length, 1)) *
@@ -585,7 +587,7 @@ export default function WorkspaceView() {
                           fontStyle: "italic",
                         }}
                       >
-                        Nog geen shots. Voeg hieronder toe.
+                        {t("wsNoShots")}
                       </div>
                     ) : (
                       (shotVideo.shotlist || []).map((s, i) => (
@@ -602,7 +604,7 @@ export default function WorkspaceView() {
                           <button
                             type="button"
                             className="sl-del"
-                            title="Verwijderen"
+                            title={t("delete")}
                             onClick={(e) => {
                               e.stopPropagation();
                               removeShot(i);
@@ -620,7 +622,7 @@ export default function WorkspaceView() {
                     id="sl-add-inp"
                     value={shotDraft}
                     onChange={(e) => setShotDraft(e.target.value)}
-                    placeholder="Shot toevoegen, bijv: Wide shot ingang · Close-up product…"
+                    placeholder={t("wsShotAddPlaceholder")}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
@@ -629,7 +631,7 @@ export default function WorkspaceView() {
                     }}
                   />
                   <button type="button" id="sl-add-btn" onClick={addShot}>
-                    + Shot
+                    {t("shotlistAdd")}
                   </button>
                 </div>
               </div>
@@ -655,13 +657,13 @@ export default function WorkspaceView() {
                       color: "var(--text)",
                     }}
                   >
-                    Script
+                    {t("script")}
                   </span>
                 </div>
                 <div id="sl-script-panel">
                   {shotVideo.script?.trim()
                     ? shotVideo.script
-                    : "Geen script beschikbaar voor deze video.\n\nVoeg een script toe via de Script kolom in de tabel."}
+                    : t("wsScriptUnavailable")}
                 </div>
               </div>
             </div>
@@ -678,7 +680,7 @@ export default function WorkspaceView() {
                 className="btn btn-ghost btn-sm"
                 onClick={() => closeShotlist()}
               >
-                Sluiten
+                {t("close")}
               </button>
             </div>
           </div>
@@ -698,12 +700,12 @@ export default function WorkspaceView() {
               <span style={{ fontSize: "18px", flexShrink: 0 }} aria-hidden>
                 📋
               </span>
-              <span id="sop-head-title">SOP — {sopVideo.name}</span>
+              <span id="sop-head-title">{t("sop")} — {sopVideo.name}</span>
               <button
                 type="button"
                 className="modal-close"
                 onClick={() => closeSop()}
-                aria-label="Sluiten"
+                aria-label={t("close")}
               >
                 ✕
               </button>
@@ -711,7 +713,7 @@ export default function WorkspaceView() {
             <div id="sop-body">
               <div>
                 <div className="sop-card">
-                  <div className="sop-card-title">🎞 Formaat & Ratio</div>
+                  <div className="sop-card-title">{t("wsSopFormatRatio")}</div>
                   <div className="sop-tags">
                     {SOP_RATIO_OPTIONS.map((tag) => {
                       const on = (sopDraft.ratioTags || []).includes(tag);
@@ -729,7 +731,7 @@ export default function WorkspaceView() {
                     })}
                   </div>
                   <label className="sop-lbl">
-                    Duur (bijv. 60s, 3 min YouTube)
+                    {t("wsSopDurationLabel")}
                   </label>
                   <input
                     className="sop-inp"
@@ -738,11 +740,11 @@ export default function WorkspaceView() {
                     onChange={(e) =>
                       setSopDraft({ ...sopDraft, format: e.target.value })
                     }
-                    placeholder="bijv. 60s reels + 3 min YouTube"
+                    placeholder={t("wsSopDurationPlaceholder")}
                   />
                 </div>
                 <div className="sop-card" style={{ marginTop: "12px" }}>
-                  <div className="sop-card-title">🎨 Stijl & Gevoel</div>
+                  <div className="sop-card-title">{t("wsSopStyleFeel")}</div>
                   <div className="sop-tags">
                     {SOP_STIJL_OPTIONS.map((tag) => {
                       const on = (sopDraft.stijlTags || []).includes(tag);
@@ -759,7 +761,7 @@ export default function WorkspaceView() {
                       );
                     })}
                   </div>
-                  <label className="sop-lbl">Kleurprofiel / LUT</label>
+                  <label className="sop-lbl">{t("wsSopLutLabel")}</label>
                   <input
                     className="sop-inp"
                     id="sop-f-kleurprofiel"
@@ -767,13 +769,13 @@ export default function WorkspaceView() {
                     onChange={(e) =>
                       setSopDraft({ ...sopDraft, kleurprofiel: e.target.value })
                     }
-                    placeholder="bijv. Warm, contrastrijk — LUT: Moody_v3"
+                    placeholder={t("wsSopLutPlaceholder")}
                   />
                 </div>
               </div>
               <div>
                 <div className="sop-card">
-                  <div className="sop-card-title">🎵 Muziek & Audio</div>
+                  <div className="sop-card-title">{t("wsSopMusicAudio")}</div>
                   <textarea
                     className="sop-ta"
                     id="sop-f-muziek"
@@ -781,12 +783,12 @@ export default function WorkspaceView() {
                     onChange={(e) =>
                       setSopDraft({ ...sopDraft, muziek: e.target.value })
                     }
-                    placeholder="bijv. Energiek, upbeat. Geen tekst. Artlist — zoek op: urban cinematic"
+                    placeholder={t("wsSopMusicPlaceholder")}
                   />
                 </div>
                 <div className="sop-card" style={{ marginTop: "12px" }}>
                   <div className="sop-card-title">
-                    📋 Instructies voor editor
+                    {t("wsSopEditorInstructions")}
                   </div>
                   <textarea
                     className="sop-ta"
@@ -797,7 +799,7 @@ export default function WorkspaceView() {
                       setSopDraft({ ...sopDraft, extraNotes: e.target.value })
                     }
                     placeholder={
-                      "Bijv:\n• Begin met de sterkste shot\n• Jump cuts voor energie\n• Ondertitels verplicht op reels\n• Exporteer H.264, max 100MB\n• Kleur: warm en zonnig"
+                      t("wsSopInstructionsPlaceholder")
                     }
                   />
                 </div>
@@ -813,21 +815,20 @@ export default function WorkspaceView() {
                     lineHeight: 1.5,
                   }}
                 >
-                  💡 Vul dit in voor de editfase — dan weet de editor precies wat
-                  het doel is en zijn er minder revisions.
+                  {t("wsSopTip")}
                 </div>
               </div>
             </div>
             <div id="sop-foot">
               <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
-                Automatisch opgeslagen · Klik buiten de modal om te sluiten
+                {t("wsSopAutoSaved")}
               </div>
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
                 onClick={() => closeSop()}
               >
-                Sluiten
+                {t("close")}
               </button>
             </div>
           </div>
@@ -843,42 +844,12 @@ export default function WorkspaceView() {
     const resources = batch.resources || {};
     const activeResources = resources[resTab] || [];
     const workflowSteps = [
-      {
-        n: 1,
-        icon: "⬇️",
-        title: "Assets downloaden",
-        desc: "Download de footage via de Drive-link hierboven. Sla elke batch op in een aparte map op je lokale schijf. Hernoem de bestanden NIET.",
-      },
-      {
-        n: 2,
-        icon: "✂️",
-        title: "Project aanmaken in Premiere",
-        desc: "Gebruik de Premiere Pro template via de link hierboven. Laad de LUTs-map in voor het correcte kleurprofiel per project.",
-      },
-      {
-        n: 3,
-        icon: "🎬",
-        title: 'Edit uitvoeren → status op "In Progress"',
-        desc: "Monteer de video op basis van de shotlist en interviewvragen. Zet de Edit Fase van jouw filmpje op In Progress zodra je begint.",
-      },
-      {
-        n: 4,
-        icon: "📤",
-        title: "Exporteren met exacte bestandsnaam",
-        desc: "Exporteer met de exacte naam zoals in de tabel hieronder, inclusief versienummer.",
-      },
-      {
-        n: 5,
-        icon: "🔗",
-        title: "Upload naar Frame.io → link in Export kolom",
-        desc: "Upload het geëxporteerde filmpje naar Frame.io en plak de link in Export Frame.io.",
-      },
-      {
-        n: 6,
-        icon: "✅",
-        title: 'Edit Fase → "Waiting for Review"',
-        desc: "Zet de Edit Fase op Waiting for Review. Na goedkeuring → Finished.",
-      },
+      { n: 1, icon: "⬇️", title: t("wsWorkflowStep1Title"), desc: t("wsWorkflowStep1Desc") },
+      { n: 2, icon: "✂️", title: t("wsWorkflowStep2Title"), desc: t("wsWorkflowStep2Desc") },
+      { n: 3, icon: "🎬", title: t("wsWorkflowStep3Title"), desc: t("wsWorkflowStep3Desc") },
+      { n: 4, icon: "📤", title: t("wsWorkflowStep4Title"), desc: t("wsWorkflowStep4Desc") },
+      { n: 5, icon: "🔗", title: t("wsWorkflowStep5Title"), desc: t("wsWorkflowStep5Desc") },
+      { n: 6, icon: "✅", title: t("wsWorkflowStep6Title"), desc: t("wsWorkflowStep6Desc") },
     ];
 
     const setBatchField = (field, value) => {
@@ -935,7 +906,7 @@ export default function WorkspaceView() {
                 className="btn btn-ghost btn-sm"
                 onClick={() => setBatchId(null)}
               >
-                ← Alle batches
+                {t("wsBackAllBatches")}
               </button>
               <span
                 style={{ fontSize: "13px", color: "var(--text-3)" }}
@@ -951,20 +922,20 @@ export default function WorkspaceView() {
                 className="btn btn-ghost btn-sm"
                 style={{ color: "#c04040", borderColor: "#e8c8c8" }}
                 onClick={() => {
-                  if (window.confirm(`"${batch.name}" verwijderen?`)) {
+                  if (window.confirm(t("wsConfirmDeleteBatch", { name: batch.name }))) {
                     deleteBatchMut.mutate(batch._id, {
                       onSuccess: () => setBatchId(null),
                     });
                   }
                 }}
               >
-                Batch verwijderen
+                {t("wsDeleteBatch")}
               </button>
               <button
                 className="btn btn-primary btn-sm"
                 onClick={() => setShowVideoModal(true)}
               >
-                + Filmpje
+                {t("wsAddNewBatch")}
               </button>
             </div>
           </div>
@@ -1002,7 +973,7 @@ export default function WorkspaceView() {
                   {batch.name}
                 </div>
                 <div style={{ fontSize: "13px", color: "var(--text-3)" }}>
-                  {batch.client} · Shoot: {batch.shootDate || "—"}
+                  {batch.client} · {t("wsShootLabel")}: {batch.shootDate || "—"}
                 </div>
               </div>
             </div>
@@ -1016,20 +987,20 @@ export default function WorkspaceView() {
               }}
             >
               <div className="ws-prop-tile">
-                <div className="ws-prop-tile-label">Shoot Status</div>
+                <div className="ws-prop-tile-label">{t("wsShootStatusLabel")}</div>
                 <select
                   className="form-select"
                   value={batch.shootStatus || "planned"}
                   onChange={(e) => setBatchField("shootStatus", e.target.value)}
                 >
-                  <option value="wrapped">Wrapped</option>
-                  <option value="tentative">Tentative</option>
-                  <option value="waiting">Waiting on Client</option>
-                  <option value="planned">Planned</option>
+                  <option value="wrapped">{t("wsShoot_wrapped")}</option>
+                  <option value="tentative">{t("wsShoot_tentative")}</option>
+                  <option value="waiting">{t("wsShoot_waiting")}</option>
+                  <option value="planned">{t("wsShoot_planned")}</option>
                 </select>
               </div>
               <div className="ws-prop-tile">
-                <div className="ws-prop-tile-label">Shoot Datum</div>
+                <div className="ws-prop-tile-label">{t("wsShootDateLabel")}</div>
                 <input
                   className="form-input"
                   type="date"
@@ -1038,7 +1009,7 @@ export default function WorkspaceView() {
                 />
               </div>
               <div className="ws-prop-tile">
-                <div className="ws-prop-tile-label">Deadline</div>
+                <div className="ws-prop-tile-label">{t("wsDeadlineLabel")}</div>
                 <input
                   className="form-input"
                   type="date"
@@ -1047,7 +1018,7 @@ export default function WorkspaceView() {
                 />
               </div>
               <div className="ws-prop-tile">
-                <div className="ws-prop-tile-label">Editor</div>
+                <div className="ws-prop-tile-label">{t("wsEditorLabel")}</div>
                 <select
                   className="form-select"
                   value={batch.editor || "Lex"}
@@ -1061,7 +1032,7 @@ export default function WorkspaceView() {
                 </select>
               </div>
               <div className="ws-prop-tile">
-                <div className="ws-prop-tile-label">Project Stage</div>
+                <div className="ws-prop-tile-label">{t("wsProjectStageLabel")}</div>
                 <select
                   className="form-select"
                   value={batch.projectStage || "preproduction"}
@@ -1069,15 +1040,15 @@ export default function WorkspaceView() {
                     setBatchField("projectStage", e.target.value)
                   }
                 >
-                  <option value="development">Development</option>
-                  <option value="preproduction">Pre-Production</option>
-                  <option value="shooting">Shooting</option>
-                  <option value="post-production">Post-Production</option>
-                  <option value="completed">Completed</option>
+                  <option value="development">{t("wsStage_development")}</option>
+                  <option value="preproduction">{t("wsStage_preproduction")}</option>
+                  <option value="shooting">{t("wsStage_shooting")}</option>
+                  <option value="post-production">{t("wsStage_postproduction")}</option>
+                  <option value="completed">{t("wsStage_completed")}</option>
                 </select>
               </div>
               <div className="ws-prop-tile">
-                <div className="ws-prop-tile-label">Klant</div>
+                <div className="ws-prop-tile-label">{t("taskClientLabel")}</div>
                 <input
                   className="form-input"
                   value={batch.client || ""}
@@ -1086,7 +1057,7 @@ export default function WorkspaceView() {
               </div>
             </div>
             <div className="ws-prop-tile ws-prop-tile-wide">
-              <div className="ws-prop-tile-label">Batch notities</div>
+              <div className="ws-prop-tile-label">{t("wsBatchNotes")}</div>
               <textarea
                 className="ws-prop-area"
                 value={batch.notes || ""}
@@ -1106,7 +1077,7 @@ export default function WorkspaceView() {
             }}
           >
             <div className="ws-sop-title">
-              🔗 Project links (Drive · LUTs · B-Roll · Premiere)
+              {t("wsProjectLinksTitle")}
             </div>
             {links.map((lk, idx) => (
               <div key={`${lk.url}-${idx}`} className="ws-link-row-item">
@@ -1167,7 +1138,7 @@ export default function WorkspaceView() {
                   rel="noopener"
                   style={{ fontSize: "11px", color: "var(--text-2)" }}
                 >
-                  Openen ↗
+                  {t("wsOpenLink")}
                 </a>
                 <button
                   className="link-row-remove"
@@ -1181,7 +1152,7 @@ export default function WorkspaceView() {
               <input
                 className="form-input"
                 style={{ maxWidth: "220px" }}
-                placeholder="Label (bijv. LUTs folder)"
+                placeholder={t("wsLinkLabelPlaceholder")}
                 value={newLink.label}
                 onChange={(e) =>
                   setNewLink((p) => ({ ...p, label: e.target.value }))
@@ -1189,7 +1160,7 @@ export default function WorkspaceView() {
               />
               <input
                 className="form-input"
-                placeholder="https://drive.google.com/..."
+                placeholder={t("wsLinkUrlPlaceholder")}
                 value={newLink.url}
                 onChange={(e) =>
                   setNewLink((p) => ({ ...p, url: e.target.value }))
@@ -1199,7 +1170,7 @@ export default function WorkspaceView() {
                 className="btn btn-primary btn-sm ws-link-add-btn"
                 onClick={addProjectLink}
               >
-                + Link toevoegen
+                {t("wsAddLink")}
               </button>
             </div>
           </div>
@@ -1215,7 +1186,7 @@ export default function WorkspaceView() {
             }}
           >
             <div className="ws-sop-title">
-              📋 Workflow — hoe werken we met deze bestanden?
+              {t("wsWorkflowTitle")}
             </div>
             <div>
               {workflowSteps.map((s, i) => (
@@ -1305,14 +1276,14 @@ export default function WorkspaceView() {
                   color: "var(--text-3)",
                 }}
               >
-                Filmpjes in batch ({total})
+                {t("wsVideosInBatch", { total })}
               </div>
               <div
                 className="ws-videos-head-right"
                 style={{ display: "flex", alignItems: "center", gap: "10px" }}
               >
                 <div style={{ fontSize: "12px", color: "var(--text-3)" }}>
-                  {done}/{total} klaar ·{" "}
+                  {t("wsVideosDoneProgress", { done, total })} ·{" "}
                   {Math.round((done / Math.max(total, 1)) * 100)}%
                 </div>
                 <button
@@ -1320,7 +1291,7 @@ export default function WorkspaceView() {
                   className="btn btn-ghost btn-sm"
                   onClick={() => setShowVideoModal(true)}
                 >
-                  + Filmpje
+                  {t("wsAddVideo")}
                 </button>
               </div>
             </div>
@@ -1330,15 +1301,15 @@ export default function WorkspaceView() {
                   <tr>
                     {[
                       "#",
-                      "Bestandsnaam",
-                      "Edit Fase",
-                      "Assets Drive",
-                      "Export Frame.io",
-                      "📝 Script",
-                      "📁 Brand Assets",
-                      "🎬 Shotlist",
-                      "📋 SOP",
-                      "Notities",
+                      t("wsVidColName"),
+                      t("wsVidColFase"),
+                      t("wsVidColAssets"),
+                      t("wsVidColExport"),
+                      `📝 ${t("script")}`,
+                      `📁 ${t("brandAssets")}`,
+                      `🎬 ${t("shotlist")}`,
+                      `📋 ${t("sop")}`,
+                      t("notes"),
                       "",
                     ].map((h) => (
                       <th key={h} className="ws-th">
@@ -1372,7 +1343,7 @@ export default function WorkspaceView() {
                         </td>
                         <EditCell
                           value={v.name}
-                          placeholder="Bestandsnaam…"
+                          placeholder={t("wsFilenamePlaceholder")}
                           onSave={(val) =>
                             updateMut.mutate({
                               bId: batch._id,
@@ -1387,7 +1358,7 @@ export default function WorkspaceView() {
                           <div style={{ padding: "4px 8px" }}>
                             {ef && (
                               <span className={`ws-pill ${ef.cls}`}>
-                                {ef.label}
+                                {t(ef.labelKey)}
                               </span>
                             )}
                             <FaseSelect
@@ -1404,7 +1375,7 @@ export default function WorkspaceView() {
                         </td>
                         <EditCell
                           value={v.assets}
-                          placeholder="+ Drive link"
+                          placeholder={t("wsAddDrivePH")}
                           onSave={(val) =>
                             updateMut.mutate({
                               bId: batch._id,
@@ -1416,7 +1387,7 @@ export default function WorkspaceView() {
                         />
                         <EditCell
                           value={v.export}
-                          placeholder="+ Frame.io link"
+                          placeholder={t("wsAddExportPH")}
                           onSave={(val) =>
                             updateMut.mutate({
                               bId: batch._id,
@@ -1428,7 +1399,7 @@ export default function WorkspaceView() {
                         />
                         <td
                           className="ws-td"
-                          title="Script bewerken"
+                          title={t("wsEditScript")}
                           onClick={() => openScript(v)}
                         >
                           <div
@@ -1459,14 +1430,14 @@ export default function WorkspaceView() {
                                   fontStyle: "italic",
                                 }}
                               >
-                                Script toevoegen…
+                                {t("wsScriptAdd")}
                               </span>
                             )}
                           </div>
                         </td>
                         <EditCell
                           value={v.driveLink}
-                          placeholder="Drive link…"
+                          placeholder={t("wsDriveLinkPlaceholder")}
                           onSave={(val) =>
                             updateMut.mutate({
                               bId: batch._id,
@@ -1478,7 +1449,7 @@ export default function WorkspaceView() {
                         />
                         <td
                           className="ws-td"
-                          title="Shotlist openen"
+                          title={t("wsOpenShotlist")}
                           onClick={() => openShotlist(v)}
                         >
                           <div
@@ -1531,14 +1502,14 @@ export default function WorkspaceView() {
                                   fontStyle: "italic",
                                 }}
                               >
-                                Shotlist aanmaken…
+                                {t("wsCreateShotlist")}
                               </span>
                             )}
                           </div>
                         </td>
                         <td
                           className="ws-td"
-                          title="SOP bewerken"
+                          title={t("wsEditSop")}
                           onClick={() => openSop(v)}
                         >
                           <div
@@ -1575,14 +1546,14 @@ export default function WorkspaceView() {
                                   fontStyle: "italic",
                                 }}
                               >
-                                SOP invullen…
+                                {t("wsFillSop")}
                               </span>
                             )}
                           </div>
                         </td>
                         <EditCell
                           value={v.notes}
-                          placeholder="Notitie…"
+                          placeholder={t("wsNotePlaceholder")}
                           multiline
                           onSave={(val) =>
                             updateMut.mutate({
@@ -1614,12 +1585,12 @@ export default function WorkspaceView() {
                                 }`}
                                 title={
                                   v.editFase === "intern_approved"
-                                    ? "Intern goedgekeurd — stuur naar klant"
-                                    : "Eerst intern goedkeuren"
+                                    ? t("wsInternApprovedSend")
+                                    : t("wsApproveInternFirst")
                                 }
                                 onClick={() => {
                                   if (v.editFase !== "intern_approved") {
-                                    window.alert("Eerst intern goedkeuren");
+                                    window.alert(t("wsApproveInternFirst"));
                                     return;
                                   }
                                   updateMut.mutate({
@@ -1631,15 +1602,15 @@ export default function WorkspaceView() {
                               >
                                 {v.editFase === "intern_approved"
                                   ? "→ Stuur naar klant"
-                                  : "→ Portaal"}
+                                  : t("wsToPortal")}
                               </button>
                             )}
                             <button
                               type="button"
                               className="ws-video-delete-btn"
-                              aria-label="Video verwijderen"
+                              aria-label={t("wsDeleteVideoAria")}
                               onClick={async () => {
-                                if (window.confirm("Video verwijderen?")) {
+                                if (window.confirm(t("wsConfirmDeleteVideo"))) {
                                   await deleteVideo(batch._id, v._id);
                                   qc.invalidateQueries(["batches"]);
                                 }
@@ -1680,7 +1651,7 @@ export default function WorkspaceView() {
                   }}
                 >
                   <span>{tab.icon}</span>
-                  {tab.label}
+                  {t(tab.labelKey)}
                 </button>
               ))}
             </div>
@@ -1713,7 +1684,7 @@ export default function WorkspaceView() {
               >
                 <input
                   className="form-input"
-                  placeholder="Naam"
+                  placeholder={t("eventNameLabel")}
                   value={resDraftName}
                   onChange={(e) => setResDraftName(e.target.value)}
                   onKeyDown={(e) => {
@@ -1722,7 +1693,7 @@ export default function WorkspaceView() {
                 />
                 <input
                   className="form-input"
-                  placeholder="Notitie (optioneel)"
+                  placeholder={t("wsOptionalNote")}
                   value={resDraftNote}
                   onChange={(e) => setResDraftNote(e.target.value)}
                   onKeyDown={(e) => {
@@ -1735,7 +1706,7 @@ export default function WorkspaceView() {
                   onClick={addResourceItem}
                   disabled={!resDraftName.trim()}
                 >
-                  + Toevoegen
+                  {t("wsAddItem")}
                 </button>
               </div>
             </div>
@@ -1749,7 +1720,7 @@ export default function WorkspaceView() {
           >
             <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <div className="modal-title">Nieuw filmpje</div>
+                <div className="modal-title">{t("wsNewVideoTitle")}</div>
                 <button
                   className="modal-close"
                   onClick={() => setShowVideoModal(false)}
@@ -1758,12 +1729,12 @@ export default function WorkspaceView() {
                 </button>
               </div>
               <div className="form-group">
-                <label className="form-label">Bestandsnaam</label>
+                <label className="form-label">{t("wsVidColName")}</label>
                 <input
                   className="form-input"
                   value={newVideoName}
                   onChange={(e) => setNewVideoName(e.target.value)}
-                  placeholder="Bijv. Kalea_Intro_Reel_v1"
+                  placeholder={t("wsVideoNameExample")}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") createNewVideo();
                   }}
@@ -1774,7 +1745,7 @@ export default function WorkspaceView() {
                   className="btn btn-ghost"
                   onClick={() => setShowVideoModal(false)}
                 >
-                  Annuleren
+                  {t("cancel")}
                 </button>
                 <button
                   className="btn btn-primary"
@@ -1798,10 +1769,10 @@ export default function WorkspaceView() {
         <div className="page-header ws-page-header">
           <div>
             <div className="page-title">
-              Workspace <em>— Editors</em>
+              {t("workspace")} <em>— {t("navEditors")}</em>
             </div>
             <div className="page-subtitle">
-              Project batches filmpjes statussen resources
+              {t("wsPageSubtitle")}
             </div>
           </div>
           <button
@@ -1829,7 +1800,7 @@ export default function WorkspaceView() {
                 onClick={() => setWsTab(tab.key)}
               >
                 <span className="ws-tab-icon">{tab.icon}</span>
-                {tab.label}
+                {t(tab.labelKey)}
               </button>
             ))}
           </div>
@@ -1837,19 +1808,19 @@ export default function WorkspaceView() {
             <table className="ws-table">
               <thead>
                 <tr>
-                  <th className="ws-th">Shoot date</th>
-                  <th className="ws-th">Shoot status</th>
+                  <th className="ws-th">{t("wsShootDateHeader")}</th>
+                  <th className="ws-th">{t("wsShootStatusHeader")}</th>
                   <th className="ws-th" style={{ minWidth: 220 }}>
-                    Batch / Project
+                    {t("wsBatchProjectHeader")}
                   </th>
-                  <th className="ws-th">Videos</th>
+                  <th className="ws-th">{t("wsVideosHeader")}</th>
                   <th className="ws-th" style={{ minWidth: 130 }}>
                     Progress
                   </th>
-                  <th className="ws-th">Deadline</th>
-                  <th className="ws-th">Stage</th>
-                  <th className="ws-th">Editor</th>
-                  <th className="ws-th">Client</th>
+                  <th className="ws-th">{t("wsDeadlineHeader")}</th>
+                  <th className="ws-th">{t("wsStageHeader")}</th>
+                  <th className="ws-th">{t("wsEditorHeader")}</th>
+                  <th className="ws-th">{t("wsClientHeader")}</th>
                   <th className="ws-th" style={{ width: 36 }} />
                 </tr>
               </thead>
@@ -1904,7 +1875,7 @@ export default function WorkspaceView() {
                         <div className="ws-td-inner">
                           {shootStatus ? (
                             <span className={`ws-pill ${shootStatus.cls}`}>
-                              {shootStatus.label}
+                              {t(shootStatus.labelKey)}
                             </span>
                           ) : (
                             <span className="ws-date-empty">—</span>
@@ -1938,7 +1909,7 @@ export default function WorkspaceView() {
                               marginLeft: 4,
                             }}
                           >
-                            film{total === 1 ? "" : "s"}
+                            {t(total === 1 ? "wsFilmSingular" : "wsFilmPlural")}
                           </span>
                         </div>
                       </td>
@@ -1973,7 +1944,7 @@ export default function WorkspaceView() {
                           <span
                             style={{ fontSize: 10, color: "var(--text-3)" }}
                           >
-                            {done}/{total} klaar
+                            {t("wsVideosDoneProgress", { done, total })}
                           </span>
                         </div>
                       </td>
@@ -1994,7 +1965,7 @@ export default function WorkspaceView() {
                         <div className="ws-td-inner">
                           {stage ? (
                             <span className={`ws-pill ${stage.cls}`}>
-                              {stage.label}
+                              {t(stage.labelKey)}
                             </span>
                           ) : (
                             <span className="ws-date-empty">—</span>
@@ -2063,7 +2034,7 @@ export default function WorkspaceView() {
                               padding: 3,
                             }}
                             onClick={() => {
-                              if (window.confirm(`"${b.name}" verwijderen?`))
+                              if (window.confirm(t("wsConfirmDeleteBatch", { name: b.name })))
                                 deleteBatchMut.mutate(b._id);
                             }}
                           >
@@ -2096,7 +2067,7 @@ export default function WorkspaceView() {
           >
             <div className="modal-header ws-create-modal-head">
               <div className="modal-title" style={{ fontSize: "24px" }}>
-                Nieuw workspace project
+                {t("wsNewWorkspaceProject")}
               </div>
               <button
                 className="modal-close"
@@ -2106,18 +2077,18 @@ export default function WorkspaceView() {
               </button>
             </div>
             <div className="form-group">
-              <label className="form-label">Project naam</label>
+              <label className="form-label">{t("wsProjectNameLabel")}</label>
               <input
                 className="form-input"
                 value={newBatch.name}
                 onChange={(e) =>
                   setNewBatch({ ...newBatch, name: e.target.value })
                 }
-                placeholder="bijv. Vermado Automotive S2"
+                placeholder={t("wsProjectNameExample")}
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Klant</label>
+              <label className="form-label">{t("taskClientLabel")}</label>
               <select
                 className="form-select"
                 value={newBatch.client}
@@ -2125,7 +2096,7 @@ export default function WorkspaceView() {
                   setNewBatch({ ...newBatch, client: e.target.value })
                 }
               >
-                <option value="">— Kies klant —</option>
+                <option value="">{t("taskClientPlaceholder")}</option>
                 {clients.map((c) => (
                   <option key={c._id} value={c.name}>
                     {c.name}
@@ -2134,7 +2105,7 @@ export default function WorkspaceView() {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Fase</label>
+              <label className="form-label">{t("phase")}</label>
               <select
                 className="form-select"
                 value={newBatch.projectStage}
@@ -2142,15 +2113,15 @@ export default function WorkspaceView() {
                   setNewBatch({ ...newBatch, projectStage: e.target.value })
                 }
               >
-                <option value="development">Development</option>
-                <option value="preproduction">Pre-productie</option>
-                <option value="shooting">Shooting</option>
-                <option value="post-production">Post-Production</option>
-                <option value="completed">Completed</option>
+                <option value="development">{t("wsStage_development")}</option>
+                <option value="preproduction">{t("wsStage_preproduction")}</option>
+                <option value="shooting">{t("wsStage_shooting")}</option>
+                <option value="post-production">{t("wsStage_postproduction")}</option>
+                <option value="completed">{t("wsStage_completed")}</option>
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Shoot datum</label>
+              <label className="form-label">{t("wsShootDateLabel")}</label>
               <input
                 type="date"
                 className="form-input"
@@ -2161,7 +2132,7 @@ export default function WorkspaceView() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Deadline</label>
+              <label className="form-label">{t("wsDeadlineLabel")}</label>
               <input
                 type="date"
                 className="form-input"
@@ -2172,7 +2143,7 @@ export default function WorkspaceView() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Lead editor</label>
+              <label className="form-label">{t("wsLeadEditorLabel")}</label>
               <select
                 className="form-select"
                 value={newBatch.editor}
@@ -2182,7 +2153,7 @@ export default function WorkspaceView() {
               >
                 {["Paolo", "Lex", "Rick", "Ray", "Boy"].map((name) => (
                   <option key={name} value={name}>
-                    {name} — {name === "Lex" ? "Editor" : "Team"}
+                    {name} — {name === "Lex" ? t("wsEditorRoleEditor") : t("team")}
                   </option>
                 ))}
               </select>
@@ -2192,7 +2163,7 @@ export default function WorkspaceView() {
                 className="btn btn-ghost ws-create-modal-btn ws-create-modal-btn-ghost"
                 onClick={() => setShowBatchModal(false)}
               >
-                Annuleer
+                {t("cancel")}
               </button>
               <button
                 className="btn btn-primary ws-create-modal-btn"
@@ -2205,7 +2176,7 @@ export default function WorkspaceView() {
                 }
                 onClick={createNewBatch}
               >
-                Project aanmaken
+                {t("wsCreateProject")}
               </button>
             </div>
           </div>

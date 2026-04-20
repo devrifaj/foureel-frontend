@@ -80,10 +80,25 @@ function prioClass(priority) {
   return 'prio-normal';
 }
 
-function TaskCardContent({ task, assigneeLookup }) {
+function TaskCardContent({
+  task,
+  assigneeLookup,
+  teamMembers = [],
+  isAssigneeEditing = false,
+  isDueDateEditing = false,
+  onStartAssigneeEdit,
+  onStartDueDateEdit,
+  onAssigneeChange,
+  onDueDateChange,
+  onCancelQuickEdit,
+  allowQuickEdit = false,
+}) {
   const av = assigneeLookup[task.assignee] || {
     bg: 'var(--text-3)',
     init: (task.assignee && String(task.assignee)[0]) || '?',
+  };
+  const stopCardClick = (e) => {
+    e.stopPropagation();
   };
   return (
     <>
@@ -94,27 +109,113 @@ function TaskCardContent({ task, assigneeLookup }) {
         </div>
       ) : null}
       <div className="task-footer">
-        <div className="task-avatar" style={{ background: av.bg }}>{av.init}</div>
-        <span className="task-due">{task.dueDate ? `📅 ${task.dueDate}` : ''}</span>
+        {allowQuickEdit && isAssigneeEditing ? (
+          <select
+            className="form-input"
+            autoFocus
+            value={task.assignee || ''}
+            onPointerDown={stopCardClick}
+            onClick={stopCardClick}
+            onChange={(e) => {
+              onAssigneeChange?.(e.target.value);
+              onCancelQuickEdit?.();
+            }}
+            onBlur={() => onCancelQuickEdit?.()}
+            style={{ maxWidth: '120px', height: '30px', fontSize: '12px', padding: '4px 8px' }}
+          >
+            {teamMembers.map((m) => (
+              <option key={m._id || m.name} value={m.name}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <button
+            type="button"
+            onPointerDown={allowQuickEdit ? stopCardClick : undefined}
+            onClick={allowQuickEdit ? (e) => { stopCardClick(e); onStartAssigneeEdit?.(); } : undefined}
+            className="task-avatar"
+            style={{ background: av.bg, border: 'none', cursor: allowQuickEdit ? 'pointer' : 'default' }}
+            aria-label="Change assignee"
+          >
+            {av.init}
+          </button>
+        )}
+        {allowQuickEdit && isDueDateEditing ? (
+          <input
+            type="date"
+            className="form-input"
+            autoFocus
+            value={task.dueDate || ''}
+            onPointerDown={stopCardClick}
+            onClick={stopCardClick}
+            onFocus={(e) => {
+              e.currentTarget.showPicker?.();
+            }}
+            onChange={(e) => {
+              if (!e.target.value) return;
+              onDueDateChange?.(e.target.value);
+              onCancelQuickEdit?.();
+            }}
+            onBlur={() => onCancelQuickEdit?.()}
+            style={{ width: '128px', height: '30px', fontSize: '12px', padding: '4px 8px' }}
+          />
+        ) : (
+          <button
+            type="button"
+            onPointerDown={allowQuickEdit ? stopCardClick : undefined}
+            onClick={allowQuickEdit ? (e) => { stopCardClick(e); onStartDueDateEdit?.(); } : undefined}
+            className="task-due"
+            style={{ border: 'none', background: 'transparent', padding: 0, cursor: allowQuickEdit ? 'pointer' : 'default' }}
+            aria-label="Change due date"
+          >
+            {task.dueDate ? `📅 ${task.dueDate}` : '📅 —'}
+          </button>
+        )}
       </div>
     </>
   );
 }
 
-function TaskCard({ task, onClick, assigneeLookup }) {
+function TaskCard({
+  task,
+  onClick,
+  assigneeLookup,
+  teamMembers,
+  isAssigneeEditing,
+  isDueDateEditing,
+  onStartAssigneeEdit,
+  onStartDueDateEdit,
+  onAssigneeChange,
+  onDueDateChange,
+  onCancelQuickEdit,
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task._id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.35 : 1 };
+  const isQuickEditing = isAssigneeEditing || isDueDateEditing;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={`task-card ${prioClass(task.priority)}${isDragging ? ' dragging' : ''}`}
-      {...attributes}
-      {...listeners}
+      {...(isQuickEditing ? {} : attributes)}
+      {...(isQuickEditing ? {} : listeners)}
       onClick={() => onClick(task)}
     >
-      <TaskCardContent task={task} assigneeLookup={assigneeLookup} />
+      <TaskCardContent
+        task={task}
+        assigneeLookup={assigneeLookup}
+        teamMembers={teamMembers}
+        isAssigneeEditing={isAssigneeEditing}
+        isDueDateEditing={isDueDateEditing}
+        onStartAssigneeEdit={onStartAssigneeEdit}
+        onStartDueDateEdit={onStartDueDateEdit}
+        onAssigneeChange={onAssigneeChange}
+        onDueDateChange={onDueDateChange}
+        onCancelQuickEdit={onCancelQuickEdit}
+        allowQuickEdit
+      />
     </div>
   );
 }
@@ -148,7 +249,17 @@ export default function TakenView() {
   const [taskModal, setTaskModal] = useState(null);
   const [newModal, setNewModal] = useState(false);
   const [toast, setToast] = useState(null);
+  const [quickEditTaskId, setQuickEditTaskId] = useState(null);
+  const [quickEditField, setQuickEditField] = useState(null);
   const [newTaskErrors, setNewTaskErrors] = useState({});
+  const [taskEditErrors, setTaskEditErrors] = useState({});
+  const [closeTaskModalOnUpdateSuccess, setCloseTaskModalOnUpdateSuccess] = useState(false);
+  const [taskEditForm, setTaskEditForm] = useState({
+    clientId: '',
+    assignee: '',
+    dueDate: '',
+    priority: 'Normal',
+  });
   const [form, setForm] = useState({
     title: '',
     assignee: '',
@@ -210,6 +321,21 @@ export default function TakenView() {
     placeholderData: (previousData) => previousData,
   });
 
+  useEffect(() => {
+    if (!taskModal) return;
+    const matchedClient = clients.find((c) => c.name === taskModal.client);
+    const resolvedClientId = taskModal.clientId
+      ? String(taskModal.clientId)
+      : (matchedClient?._id ? String(matchedClient._id) : '');
+    setTaskEditForm({
+      clientId: resolvedClientId,
+      assignee: taskModal.assignee || '',
+      dueDate: taskModal.dueDate || '',
+      priority: taskModal.priority || 'Normal',
+    });
+    setTaskEditErrors({});
+  }, [taskModal, clients]);
+
   const assigneeLookup = useMemo(() => buildAssigneeLookup(teamMembers), [teamMembers]);
   const showTeamFilterSkeleton = teamLoading && !teamError;
   const teamFilterSkeletonCount = showTeamFilterSkeleton
@@ -258,6 +384,13 @@ export default function TakenView() {
     onError: (_error, _variables, context) => {
       if (context?.previousTasks) {
         qc.setQueryData(['tasks'], context.previousTasks);
+      }
+      setCloseTaskModalOnUpdateSuccess(false);
+    },
+    onSuccess: () => {
+      if (closeTaskModalOnUpdateSuccess) {
+        setTaskModal(null);
+        setCloseTaskModalOnUpdateSuccess(false);
       }
     },
     onSettled: () => {
@@ -425,6 +558,27 @@ export default function TakenView() {
                       task={task}
                       onClick={handleTaskCardClick}
                       assigneeLookup={assigneeLookup}
+                      teamMembers={teamMembers}
+                      isAssigneeEditing={quickEditTaskId === task._id && quickEditField === 'assignee'}
+                      isDueDateEditing={quickEditTaskId === task._id && quickEditField === 'dueDate'}
+                      onStartAssigneeEdit={() => {
+                        setQuickEditTaskId(task._id);
+                        setQuickEditField('assignee');
+                      }}
+                      onStartDueDateEdit={() => {
+                        setQuickEditTaskId(task._id);
+                        setQuickEditField('dueDate');
+                      }}
+                      onAssigneeChange={(assignee) => {
+                        updateMut.mutate({ id: task._id, assignee });
+                      }}
+                      onDueDateChange={(dueDate) => {
+                        updateMut.mutate({ id: task._id, dueDate });
+                      }}
+                      onCancelQuickEdit={() => {
+                        setQuickEditTaskId(null);
+                        setQuickEditField(null);
+                      }}
                     />
                   ))}
                   {col.id === 'todo' && (
@@ -479,12 +633,87 @@ export default function TakenView() {
             </div>
             <div className="modal-body">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
-                {[['Klant', taskModal.client || '—'], ['Toegewezen', taskModal.assignee], ['Deadline', taskModal.dueDate || '—'], ['Prioriteit', taskModal.priority]].map(([l, v]) => (
-                  <div key={l} style={{ background: 'var(--bg-alt)', borderRadius: '8px', padding: '10px 12px' }}>
-                    <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '3px' }}>{l}</div>
-                    <div style={{ fontSize: '13px', fontWeight: '500' }}>{v}</div>
-                  </div>
-                ))}
+                <div style={{ background: 'var(--bg-alt)', borderRadius: '8px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '6px' }}>Klant</div>
+                  <select
+                    className="form-input"
+                    value={taskEditForm.clientId}
+                    onChange={(e) => {
+                      setTaskEditForm((prev) => ({ ...prev, clientId: e.target.value }));
+                      setTaskEditErrors((prev) => {
+                        if (!prev.clientId) return prev;
+                        const next = { ...prev };
+                        delete next.clientId;
+                        return next;
+                      });
+                    }}
+                    style={taskEditErrors.clientId ? newTaskErrBorder : undefined}
+                    aria-invalid={Boolean(taskEditErrors.clientId)}
+                    aria-describedby={taskEditErrors.clientId ? 'task-edit-client-err' : undefined}
+                  >
+                    {clients.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {taskEditErrors.clientId ? (
+                    <div id="task-edit-client-err" className="form-field-error" role="alert">
+                      {taskEditErrors.clientId}
+                    </div>
+                  ) : null}
+                </div>
+                <div style={{ background: 'var(--bg-alt)', borderRadius: '8px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '6px' }}>Toegewezen</div>
+                  <select
+                    className="form-input"
+                    value={taskEditForm.assignee}
+                    onChange={(e) => setTaskEditForm((prev) => ({ ...prev, assignee: e.target.value }))}
+                  >
+                    {teamMembers.map((m) => (
+                      <option key={m._id || m.name} value={m.name}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ background: 'var(--bg-alt)', borderRadius: '8px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '6px' }}>Deadline</div>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={taskEditForm.dueDate}
+                    onChange={(e) => {
+                      setTaskEditForm((prev) => ({ ...prev, dueDate: e.target.value }));
+                      setTaskEditErrors((prev) => {
+                        if (!prev.dueDate) return prev;
+                        const next = { ...prev };
+                        delete next.dueDate;
+                        return next;
+                      });
+                    }}
+                    style={taskEditErrors.dueDate ? newTaskErrBorder : undefined}
+                    aria-invalid={Boolean(taskEditErrors.dueDate)}
+                    aria-describedby={taskEditErrors.dueDate ? 'task-edit-due-err' : undefined}
+                  />
+                  {taskEditErrors.dueDate ? (
+                    <div id="task-edit-due-err" className="form-field-error" role="alert">
+                      {taskEditErrors.dueDate}
+                    </div>
+                  ) : null}
+                </div>
+                <div style={{ background: 'var(--bg-alt)', borderRadius: '8px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '6px' }}>Prioriteit</div>
+                  <select
+                    className="form-input"
+                    value={taskEditForm.priority}
+                    onChange={(e) => setTaskEditForm((prev) => ({ ...prev, priority: e.target.value }))}
+                  >
+                    <option value="High">{t('taskPriorityHigh')}</option>
+                    <option value="Normal">{t('taskPriorityNormal')}</option>
+                    <option value="Low">{t('taskPriorityLow')}</option>
+                  </select>
+                </div>
               </div>
               {taskModal.description && <p style={{ fontSize: '13px', color: 'var(--text-2)', marginBottom: '16px', padding: '12px', background: 'var(--bg-alt)', borderRadius: '8px' }}>{taskModal.description}</p>}
               {(taskModal.checklist || []).length > 0 && (
@@ -520,7 +749,7 @@ export default function TakenView() {
             <div className="modal-footer">
               <button
                 type="button"
-                 className="btn btn-ghost"
+                 className="btn btn-primary"
                 style={{ marginRight: 'auto' }}
                 onClick={() =>
                   archiveMut.mutate({
@@ -531,7 +760,38 @@ export default function TakenView() {
               >
                 {t('archive')}
               </button>
-              <button type="button" className="btn btn-primary" onClick={() => setTaskModal(null)}>{t('close')}</button>
+              <button type="button" className="btn btn-ghost" onClick={() => setTaskModal(null)}>{t('close')}</button>
+
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  const errors = {};
+                  if (!String(taskEditForm.clientId || '').trim()) {
+                    errors.clientId = t('taskValClientRequired');
+                  }
+                  if (!String(taskEditForm.dueDate || '').trim()) {
+                    errors.dueDate = t('taskValDueRequired');
+                  }
+                  if (Object.keys(errors).length) {
+                    setTaskEditErrors(errors);
+                    return;
+                  }
+                  const selectedClient = clients.find((c) => String(c._id) === String(taskEditForm.clientId));
+                  setCloseTaskModalOnUpdateSuccess(true);
+                  updateMut.mutate({
+                    id: taskModal._id,
+                    assignee: taskEditForm.assignee,
+                    dueDate: taskEditForm.dueDate,
+                    priority: taskEditForm.priority,
+                    clientId: taskEditForm.clientId || undefined,
+                    client: selectedClient?.name || '',
+                  });
+                }}
+                disabled={updateMut.isPending}
+              >
+                {t('save')}
+              </button>
             </div>
           </div>
         </div>
