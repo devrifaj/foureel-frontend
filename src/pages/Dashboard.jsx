@@ -11,7 +11,6 @@ const DEFAULT_MEMBER_FORM = {
   password: '',
   name: '',
   teamRole: '',
-  initials: '',
   color: '#C8953A',
 };
 
@@ -247,7 +246,6 @@ export default function Dashboard() {
       password: memberForm.password.trim(),
       name: memberForm.name.trim(),
       teamRole: memberForm.teamRole.trim(),
-      initials: memberForm.initials.trim(),
       color: memberForm.color,
     });
   };
@@ -534,28 +532,7 @@ export default function Dashboard() {
                   </div>
                 ) : null}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" htmlFor="team-add-initials">
-                    {t('teamInitialsLabel')}
-                  </label>
-                  <input
-                    id="team-add-initials"
-                    type="text"
-                    className="form-input"
-                    maxLength={4}
-                    value={memberForm.initials}
-                    onChange={(e) => patchMemberForm('initials', e.target.value)}
-                    style={memberFormErrors.initials ? teamMemberErrBorder : undefined}
-                    aria-invalid={Boolean(memberFormErrors.initials)}
-                    aria-describedby={memberFormErrors.initials ? 'team-add-initials-err' : undefined}
-                  />
-                  {memberFormErrors.initials ? (
-                    <div id="team-add-initials-err" className="form-field-error" role="alert">
-                      {memberFormErrors.initials}
-                    </div>
-                  ) : null}
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label" htmlFor="team-add-color">
                     {t('teamColorLabel')}

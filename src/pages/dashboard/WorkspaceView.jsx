@@ -4,14 +4,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../context/AuthContext";
 import { useLang } from "../../context/LangContext";
 import {
-  getBatches,
-  updateVideo,
-  deleteVideo,
-  addVideo,
-  createBatch,
-  deleteBatch,
+  getWorkspaces,
+  createWorkspace,
+  updateWorkspace,
+  deleteWorkspace,
+  addWorkspaceBatch,
+  deleteWorkspaceBatch,
+  addWorkspaceVideo,
+  updateWorkspaceVideo,
+  deleteWorkspaceVideo,
   getClients,
-  updateBatch,
 } from "../../api";
 
 const FASE_MAP = {
@@ -151,7 +153,10 @@ export default function WorkspaceView() {
   const { t, lang } = useLang();
   const [wsTab, setWsTab] = useState("inbox");
   const [batchId, setBatchId] = useState(null);
+  const [addVideoBatchId, setAddVideoBatchId] = useState(null);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [showCreateBatchModal, setShowCreateBatchModal] = useState(false);
+  const [newBatchSubName, setNewBatchSubName] = useState("");
   const [newBatch, setNewBatch] = useState({
     name: "",
     client: "",
@@ -160,6 +165,7 @@ export default function WorkspaceView() {
     shootDate: "",
     deadline: "",
   });
+  const [newBatchErrors, setNewBatchErrors] = useState({});
   const [scriptVideo, setScriptVideo] = useState(null);
   const [scriptDraft, setScriptDraft] = useState("");
   const [shotVideo, setShotVideo] = useState(null);
@@ -167,7 +173,8 @@ export default function WorkspaceView() {
   const [shootMode, setShootMode] = useState(false);
   const [sopVideo, setSopVideo] = useState(null);
   const [sopDraft, setSopDraft] = useState(null);
-  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [pendingDeleteBatch, setPendingDeleteBatch] = useState(null);
+  const [pendingDeleteSubBatch, setPendingDeleteSubBatch] = useState(null);
   const [newVideoName, setNewVideoName] = useState("");
   const [newLink, setNewLink] = useState({ label: "", url: "" });
   const [resTab, setResTab] = useState("scripts");
@@ -177,37 +184,66 @@ export default function WorkspaceView() {
   const qc = useQueryClient();
 
   const { data: batches = [] } = useQuery({
-    queryKey: ["batches"],
-    queryFn: getBatches,
+    queryKey: ["workspaces"],
+    queryFn: getWorkspaces,
   });
   const { data: clients = [] } = useQuery({
     queryKey: ["clients"],
     queryFn: getClients,
   });
   const updateMut = useMutation({
-    mutationFn: ({ bId, vId, ...d }) => updateVideo(bId, vId, d),
-    onSuccess: () => qc.invalidateQueries(["batches"]),
+    mutationFn: ({ wsId, subBId, vId, ...d }) =>
+      updateWorkspaceVideo(wsId, subBId, vId, d),
+    onSuccess: () => qc.invalidateQueries(["workspaces"]),
   });
   const createBatchMut = useMutation({
-    mutationFn: createBatch,
+    mutationFn: createWorkspace,
     onSuccess: (created) => {
-      qc.invalidateQueries(["batches"]);
+      qc.invalidateQueries(["workspaces"]);
       if (created?._id) setBatchId(created._id);
     },
   });
   const deleteBatchMut = useMutation({
-    mutationFn: deleteBatch,
+    mutationFn: deleteWorkspace,
     onSuccess: () => {
-      qc.invalidateQueries(["batches"]);
+      qc.invalidateQueries(["workspaces"]);
       if (batchId) setBatchId(null);
     },
   });
   const updateBatchMut = useMutation({
-    mutationFn: ({ id, data }) => updateBatch(id, data),
-    onSuccess: () => qc.invalidateQueries(["batches"]),
+    mutationFn: ({ id, data }) => updateWorkspace(id, data),
+    onSuccess: () => qc.invalidateQueries(["workspaces"]),
+  });
+  const addSubBatchMut = useMutation({
+    mutationFn: ({ wsId, data }) => addWorkspaceBatch(wsId, data),
+    onSuccess: (ws) => {
+      qc.setQueryData(["workspaces"], (prev = []) =>
+        prev.map((w) => (w._id === ws._id ? ws : w)),
+      );
+      qc.invalidateQueries(["workspaces"]);
+    },
+  });
+  const deleteSubBatchMut = useMutation({
+    mutationFn: ({ wsId, bId }) => deleteWorkspaceBatch(wsId, bId),
+    onSuccess: (ws) => {
+      if (ws && ws._id) {
+        qc.setQueryData(["workspaces"], (prev = []) =>
+          prev.map((w) => (w._id === ws._id ? ws : w)),
+        );
+      }
+      qc.invalidateQueries(["workspaces"]);
+    },
   });
 
   const batch = batches.find((b) => b._id === batchId);
+  const subBatches = batch?.batches || [];
+  const findSubBatchByVideoId = (videoId) => {
+    if (!videoId) return null;
+    for (const sb of subBatches) {
+      if ((sb.videos || []).some((v) => v._id === videoId)) return sb;
+    }
+    return null;
+  };
   const formatShortDate = (isoDate) => {
     if (!isoDate) return "—";
     const dt = new Date(isoDate);
@@ -288,8 +324,14 @@ export default function WorkspaceView() {
   };
   const saveScript = () => {
     if (!batch || !scriptVideo) return;
+    const sb = findSubBatchByVideoId(scriptVideo._id);
+    if (!sb) {
+      setScriptVideo(null);
+      return;
+    }
     updateMut.mutate({
-      bId: batch._id,
+      wsId: batch._id,
+      subBId: sb._id,
       vId: scriptVideo._id,
       script: scriptDraft,
     });
@@ -303,8 +345,11 @@ export default function WorkspaceView() {
   };
   const saveShotlist = (nextShotlist) => {
     if (!batch || !shotVideo) return;
+    const sb = findSubBatchByVideoId(shotVideo._id);
+    if (!sb) return;
     updateMut.mutate({
-      bId: batch._id,
+      wsId: batch._id,
+      subBId: sb._id,
       vId: shotVideo._id,
       shotlist: nextShotlist,
     });
@@ -379,7 +424,17 @@ export default function WorkspaceView() {
       setSopVideo(null);
       return;
     }
-    updateMut.mutate({ bId: batch._id, vId: sopVideo._id, sop: sopDraft });
+    const sb = findSubBatchByVideoId(sopVideo._id);
+    if (!sb) {
+      setSopVideo(null);
+      return;
+    }
+    updateMut.mutate({
+      wsId: batch._id,
+      subBId: sb._id,
+      vId: sopVideo._id,
+      sop: sopDraft,
+    });
     setSopVideo(null);
   };
 
@@ -406,9 +461,40 @@ export default function WorkspaceView() {
     setSopDraft({ ...sopDraft, [key]: next });
   };
 
+  const updateNewBatchField = (field, value) => {
+    setNewBatch((prev) => ({ ...prev, [field]: value }));
+    setNewBatchErrors((prev) => {
+      if (!prev[field] && !(field === "deadline" && prev.dateOrder)) return prev;
+      const next = { ...prev };
+      delete next[field];
+      if (field === "shootDate" || field === "deadline") delete next.dateOrder;
+      return next;
+    });
+  };
+
+  const validateNewBatch = () => {
+    const errors = {};
+    if (!newBatch.name.trim()) errors.name = "Project name is required.";
+    if (!newBatch.client) errors.client = "Client is required.";
+    if (!newBatch.projectStage) errors.projectStage = "Phase is required.";
+    if (!newBatch.shootDate) errors.shootDate = "Shoot date is required.";
+    if (!newBatch.deadline) errors.deadline = "Deadline is required.";
+    if (!newBatch.editor) errors.editor = "Lead editor is required.";
+    if (
+      newBatch.shootDate &&
+      newBatch.deadline &&
+      new Date(newBatch.deadline) < new Date(newBatch.shootDate)
+    ) {
+      errors.dateOrder = "Deadline must be on or after shoot date.";
+    }
+    return errors;
+  };
+
   const createNewBatch = () => {
-    if (!newBatch.name.trim()) return;
-    if (!newBatch.client || !newBatch.editor || !newBatch.projectStage) return;
+    const errors = validateNewBatch();
+    setNewBatchErrors(errors);
+    if (Object.keys(errors).length) return;
+
     createBatchMut.mutate(
       {
         name: newBatch.name.trim(),
@@ -423,6 +509,7 @@ export default function WorkspaceView() {
       {
         onSuccess: () => {
           setShowBatchModal(false);
+          setNewBatchErrors({});
           setNewBatch({
             name: "",
             client: "",
@@ -437,19 +524,332 @@ export default function WorkspaceView() {
   };
 
   const createNewVideo = async () => {
-    if (!batch || !newVideoName.trim()) return;
-    await addVideo(batch._id, {
+    if (!batch || !addVideoBatchId || !newVideoName.trim()) return;
+    await addWorkspaceVideo(batch._id, addVideoBatchId, {
       name: newVideoName.trim(),
       editFase: "tentative",
     });
     setNewVideoName("");
-    setShowVideoModal(false);
-    qc.invalidateQueries(["batches"]);
+    setAddVideoBatchId(null);
+    qc.invalidateQueries(["workspaces"]);
+  };
+
+  const createNewSubBatch = () => {
+    const name = newBatchSubName.trim();
+    if (!batch || !name) return;
+    addSubBatchMut.mutate(
+      { wsId: batch._id, data: { name } },
+      {
+        onSuccess: () => {
+          setShowCreateBatchModal(false);
+          setNewBatchSubName("");
+        },
+      },
+    );
   };
 
   if (user?.role !== "team") {
     return <Navigate to="/portaal" replace />;
   }
+
+  const deleteWorkspaceOverlay = pendingDeleteBatch && (
+    <div
+      className="modal-overlay open"
+      onMouseDown={() => {
+        if (!deleteBatchMut.isLoading) setPendingDeleteBatch(null);
+      }}
+    >
+      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">{t("wsDeleteWorkspace")}</div>
+          <button
+            className="modal-close"
+            onClick={() => setPendingDeleteBatch(null)}
+            disabled={deleteBatchMut.isLoading}
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ padding: "4px 2px 8px", color: "var(--text-2)" }}>
+          {t("wsConfirmDeleteBatch", { name: pendingDeleteBatch.name })}
+        </div>
+        <div className="modal-footer">
+          <button
+            className="btn btn-ghost"
+            onClick={() => setPendingDeleteBatch(null)}
+            disabled={deleteBatchMut.isLoading}
+          >
+            {t("cancel")}
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ background: "#c04040", borderColor: "#c04040" }}
+            disabled={deleteBatchMut.isLoading}
+            onClick={() => {
+              const id = pendingDeleteBatch._id;
+              const isCurrent = batchId === id;
+              deleteBatchMut.mutate(id, {
+                onSuccess: () => {
+                  setPendingDeleteBatch(null);
+                  if (isCurrent) setBatchId(null);
+                },
+              });
+            }}
+          >
+            {t("wsDeleteWorkspace")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const batchCreateOverlay = showBatchModal && (
+    <div
+      className="modal-overlay open"
+      onMouseDown={() => setShowBatchModal(false)}
+    >
+      <div
+        className="modal ws-create-modal"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header ws-create-modal-head">
+          <div className="modal-title" style={{ fontSize: "24px" }}>
+            {t("wsNewWorkspaceProject")}
+          </div>
+          <button
+            className="modal-close"
+            onClick={() => setShowBatchModal(false)}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="form-group">
+          <label className="form-label">{t("wsProjectNameLabel")}</label>
+          <input
+            className="form-input"
+            style={newBatchErrors.name ? { borderColor: "#c04040" } : undefined}
+            value={newBatch.name}
+            onChange={(e) => updateNewBatchField("name", e.target.value)}
+            placeholder={t("wsProjectNameExample")}
+          />
+          {newBatchErrors.name && (
+            <div style={{ marginTop: "6px", fontSize: "12px", color: "#c04040" }}>
+              {newBatchErrors.name}
+            </div>
+          )}
+        </div>
+        <div className="form-group">
+          <label className="form-label">{t("taskClientLabel")}</label>
+          <select
+            className="form-select"
+            style={newBatchErrors.client ? { borderColor: "#c04040" } : undefined}
+            value={newBatch.client}
+            onChange={(e) => updateNewBatchField("client", e.target.value)}
+          >
+            <option value="">{t("taskClientPlaceholder")}</option>
+            {clients.map((c) => (
+              <option key={c._id} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {newBatchErrors.client && (
+            <div style={{ marginTop: "6px", fontSize: "12px", color: "#c04040" }}>
+              {newBatchErrors.client}
+            </div>
+          )}
+        </div>
+        <div className="form-group">
+          <label className="form-label">{t("phase")}</label>
+          <select
+            className="form-select"
+            style={newBatchErrors.projectStage ? { borderColor: "#c04040" } : undefined}
+            value={newBatch.projectStage}
+            onChange={(e) => updateNewBatchField("projectStage", e.target.value)}
+          >
+            <option value="development">{t("wsStage_development")}</option>
+            <option value="preproduction">{t("wsStage_preproduction")}</option>
+            <option value="shooting">{t("wsStage_shooting")}</option>
+            <option value="post-production">{t("wsStage_postproduction")}</option>
+            <option value="completed">{t("wsStage_completed")}</option>
+          </select>
+          {newBatchErrors.projectStage && (
+            <div style={{ marginTop: "6px", fontSize: "12px", color: "#c04040" }}>
+              {newBatchErrors.projectStage}
+            </div>
+          )}
+        </div>
+        <div className="form-group">
+          <label className="form-label">{t("wsShootDateLabel")}</label>
+          <input
+            type="date"
+            className="form-input"
+            style={newBatchErrors.shootDate ? { borderColor: "#c04040" } : undefined}
+            value={newBatch.shootDate}
+            onChange={(e) => updateNewBatchField("shootDate", e.target.value)}
+          />
+          {newBatchErrors.shootDate && (
+            <div style={{ marginTop: "6px", fontSize: "12px", color: "#c04040" }}>
+              {newBatchErrors.shootDate}
+            </div>
+          )}
+        </div>
+        <div className="form-group">
+          <label className="form-label">{t("wsDeadlineLabel")}</label>
+          <input
+            type="date"
+            className="form-input"
+            style={newBatchErrors.deadline ? { borderColor: "#c04040" } : undefined}
+            value={newBatch.deadline}
+            onChange={(e) => updateNewBatchField("deadline", e.target.value)}
+          />
+          {newBatchErrors.deadline && (
+            <div style={{ marginTop: "6px", fontSize: "12px", color: "#c04040" }}>
+              {newBatchErrors.deadline}
+            </div>
+          )}
+          {newBatchErrors.dateOrder && (
+            <div style={{ marginTop: "6px", fontSize: "12px", color: "#c04040" }}>
+              {newBatchErrors.dateOrder}
+            </div>
+          )}
+        </div>
+        <div className="form-group">
+          <label className="form-label">{t("wsLeadEditorLabel")}</label>
+          <select
+            className="form-select"
+            style={newBatchErrors.editor ? { borderColor: "#c04040" } : undefined}
+            value={newBatch.editor}
+            onChange={(e) => updateNewBatchField("editor", e.target.value)}
+          >
+            {["Paolo", "Lex", "Rick", "Ray", "Boy"].map((name) => (
+              <option key={name} value={name}>
+                {name} — {name === "Lex" ? t("wsEditorRoleEditor") : t("team")}
+              </option>
+            ))}
+          </select>
+          {newBatchErrors.editor && (
+            <div style={{ marginTop: "6px", fontSize: "12px", color: "#c04040" }}>
+              {newBatchErrors.editor}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer ws-create-modal-foot">
+          <button
+            className="btn btn-ghost ws-create-modal-btn ws-create-modal-btn-ghost"
+            onClick={() => setShowBatchModal(false)}
+          >
+            {t("cancel")}
+          </button>
+          <button
+            className="btn btn-primary ws-create-modal-btn"
+            disabled={createBatchMut.isPending}
+            onClick={createNewBatch}
+          >
+            {t("wsCreateProject")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const subBatchCreateOverlay = showCreateBatchModal && batch && (
+    <div
+      className="modal-overlay open"
+      onMouseDown={() => setShowCreateBatchModal(false)}
+    >
+      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">{t("wsNewBatchTitle")}</div>
+          <button
+            className="modal-close"
+            onClick={() => setShowCreateBatchModal(false)}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="form-group">
+          <label className="form-label">{t("wsBatchNameLabel")}</label>
+          <input
+            autoFocus
+            className="form-input"
+            value={newBatchSubName}
+            onChange={(e) => setNewBatchSubName(e.target.value)}
+            placeholder={t("wsBatchNameExample")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") createNewSubBatch();
+            }}
+          />
+        </div>
+        <div className="modal-footer">
+          <button
+            className="btn btn-ghost"
+            onClick={() => setShowCreateBatchModal(false)}
+          >
+            {t("cancel")}
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={!newBatchSubName.trim() || addSubBatchMut.isPending}
+            onClick={createNewSubBatch}
+          >
+            {t("wsCreateBatch")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const subBatchDeleteOverlay = pendingDeleteSubBatch && batch && (
+    <div
+      className="modal-overlay open"
+      onMouseDown={() => {
+        if (!deleteSubBatchMut.isLoading) setPendingDeleteSubBatch(null);
+      }}
+    >
+      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">{t("wsDeleteBatchBtn")}</div>
+          <button
+            className="modal-close"
+            onClick={() => setPendingDeleteSubBatch(null)}
+            disabled={deleteSubBatchMut.isLoading}
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ padding: "4px 2px 8px", color: "var(--text-2)" }}>
+          {t("wsConfirmDeleteBatchSub", { name: pendingDeleteSubBatch.name })}
+        </div>
+        <div className="modal-footer">
+          <button
+            className="btn btn-ghost"
+            onClick={() => setPendingDeleteSubBatch(null)}
+            disabled={deleteSubBatchMut.isLoading}
+          >
+            {t("cancel")}
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ background: "#c04040", borderColor: "#c04040" }}
+            disabled={deleteSubBatchMut.isLoading}
+            onClick={() => {
+              deleteSubBatchMut.mutate(
+                { wsId: batch._id, bId: pendingDeleteSubBatch._id },
+                {
+                  onSuccess: () => {
+                    setPendingDeleteSubBatch(null);
+                  },
+                },
+              );
+            }}
+          >
+            {t("wsDeleteBatchBtn")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   const scriptShotSopOverlays = (
     <>
@@ -838,8 +1238,6 @@ export default function WorkspaceView() {
   );
 
   if (batch) {
-    const done = batch.videos.filter((v) => v.editFase === "finished").length;
-    const total = batch.videos.length;
     const links = batch.links || [];
     const resources = batch.resources || {};
     const activeResources = resources[resTab] || [];
@@ -906,7 +1304,7 @@ export default function WorkspaceView() {
                 className="btn btn-ghost btn-sm"
                 onClick={() => setBatchId(null)}
               >
-                {t("wsBackAllBatches")}
+                {t("wsBackAllWorkspaces")}
               </button>
               <span
                 style={{ fontSize: "13px", color: "var(--text-3)" }}
@@ -921,19 +1319,13 @@ export default function WorkspaceView() {
               <button
                 className="btn btn-ghost btn-sm"
                 style={{ color: "#c04040", borderColor: "#e8c8c8" }}
-                onClick={() => {
-                  if (window.confirm(t("wsConfirmDeleteBatch", { name: batch.name }))) {
-                    deleteBatchMut.mutate(batch._id, {
-                      onSuccess: () => setBatchId(null),
-                    });
-                  }
-                }}
+                onClick={() => setPendingDeleteBatch(batch)}
               >
-                {t("wsDeleteBatch")}
+                {t("wsDeleteWorkspace")}
               </button>
               <button
                 className="btn btn-primary btn-sm"
-                onClick={() => setShowVideoModal(true)}
+                onClick={() => setShowCreateBatchModal(true)}
               >
                 {t("wsAddNewBatch")}
               </button>
@@ -1247,13 +1639,38 @@ export default function WorkspaceView() {
             </div>
           </div>
 
+          {subBatches.length === 0 && (
+            <div
+              className="ws-detail-card"
+              style={{
+                background: "var(--card)",
+                borderRadius: "var(--radius)",
+                boxShadow: "var(--shadow)",
+                padding: "24px",
+                textAlign: "center",
+                color: "var(--text-3)",
+                fontSize: "13px",
+              }}
+            >
+              {t("wsBatchesEmpty")}
+            </div>
+          )}
+          {subBatches.map((sb) => {
+            const videos = sb.videos || [];
+            const done = videos.filter(
+              (v) => v.editFase === "finished",
+            ).length;
+            const total = videos.length;
+            return (
           <div
+            key={sb._id}
             className="ws-detail-card"
             style={{
               background: "var(--card)",
               borderRadius: "var(--radius)",
               boxShadow: "var(--shadow)",
               overflow: "hidden",
+              marginBottom: "14px",
             }}
           >
             <div
@@ -1264,19 +1681,39 @@ export default function WorkspaceView() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
+                gap: "12px",
+                flexWrap: "wrap",
               }}
             >
               <div
                 style={{
-                  fontFamily: "Montserrat",
-                  fontSize: "12px",
-                  fontWeight: "700",
-                  letterSpacing: ".1em",
-                  textTransform: "uppercase",
-                  color: "var(--text-3)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  flex: "1 1 auto",
+                  minWidth: 0,
                 }}
               >
-                {t("wsVideosInBatch", { total })}
+                <span style={{ fontSize: "18px" }}>{sb.emoji || "🎬"}</span>
+                <span
+                  style={{
+                    fontFamily: "Montserrat",
+                    fontSize: "15px",
+                    fontWeight: 600,
+                    color: "var(--text)",
+                  }}
+                >
+                  {sb.name}
+                </span>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--text-3)",
+                    fontWeight: 500,
+                  }}
+                >
+                  ({total})
+                </span>
               </div>
               <div
                 className="ws-videos-head-right"
@@ -1289,7 +1726,16 @@ export default function WorkspaceView() {
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
-                  onClick={() => setShowVideoModal(true)}
+                  onClick={() => setPendingDeleteSubBatch(sb)}
+                  style={{ color: "#c04040", whiteSpace: "nowrap" }}
+                >
+                  {t("wsDeleteBatchBtn")}
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setAddVideoBatchId(sb._id)}
                 >
                   {t("wsAddVideo")}
                 </button>
@@ -1319,7 +1765,7 @@ export default function WorkspaceView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {batch.videos.map((v, i) => {
+                  {videos.map((v, i) => {
                     const shots = v.shotlist || [];
                     const done = shots.filter((s) => s.done).length;
                     const ef = FASE_MAP[v.editFase];
@@ -1346,7 +1792,8 @@ export default function WorkspaceView() {
                           placeholder={t("wsFilenamePlaceholder")}
                           onSave={(val) =>
                             updateMut.mutate({
-                              bId: batch._id,
+                              wsId: batch._id,
+                              subBId: sb._id,
                               vId: v._id,
                               name: val,
                             })
@@ -1365,7 +1812,8 @@ export default function WorkspaceView() {
                               value={v.editFase}
                               onChange={(val) =>
                                 updateMut.mutate({
-                                  bId: batch._id,
+                                  wsId: batch._id,
+                                  subBId: sb._id,
                                   vId: v._id,
                                   editFase: val,
                                 })
@@ -1378,7 +1826,8 @@ export default function WorkspaceView() {
                           placeholder={t("wsAddDrivePH")}
                           onSave={(val) =>
                             updateMut.mutate({
-                              bId: batch._id,
+                              wsId: batch._id,
+                              subBId: sb._id,
                               vId: v._id,
                               assets: val,
                             })
@@ -1390,7 +1839,8 @@ export default function WorkspaceView() {
                           placeholder={t("wsAddExportPH")}
                           onSave={(val) =>
                             updateMut.mutate({
-                              bId: batch._id,
+                              wsId: batch._id,
+                              subBId: sb._id,
                               vId: v._id,
                               export: val,
                             })
@@ -1440,7 +1890,8 @@ export default function WorkspaceView() {
                           placeholder={t("wsDriveLinkPlaceholder")}
                           onSave={(val) =>
                             updateMut.mutate({
-                              bId: batch._id,
+                              wsId: batch._id,
+                              subBId: sb._id,
                               vId: v._id,
                               driveLink: val,
                             })
@@ -1557,7 +2008,8 @@ export default function WorkspaceView() {
                           multiline
                           onSave={(val) =>
                             updateMut.mutate({
-                              bId: batch._id,
+                              wsId: batch._id,
+                              subBId: sb._id,
                               vId: v._id,
                               notes: val,
                             })
@@ -1594,7 +2046,8 @@ export default function WorkspaceView() {
                                     return;
                                   }
                                   updateMut.mutate({
-                                    bId: batch._id,
+                                    wsId: batch._id,
+                                    subBId: sb._id,
                                     vId: v._id,
                                     editFase: "waitreview",
                                   });
@@ -1611,8 +2064,12 @@ export default function WorkspaceView() {
                               aria-label={t("wsDeleteVideoAria")}
                               onClick={async () => {
                                 if (window.confirm(t("wsConfirmDeleteVideo"))) {
-                                  await deleteVideo(batch._id, v._id);
-                                  qc.invalidateQueries(["batches"]);
+                                  await deleteWorkspaceVideo(
+                                    batch._id,
+                                    sb._id,
+                                    v._id,
+                                  );
+                                  qc.invalidateQueries(["workspaces"]);
                                 }
                               }}
                             >
@@ -1627,6 +2084,8 @@ export default function WorkspaceView() {
               </table>
             </div>
           </div>
+            );
+          })}
 
           <div
             className="ws-detail-card"
@@ -1713,17 +2172,17 @@ export default function WorkspaceView() {
           </div>
         </section>
 
-        {showVideoModal && (
+        {addVideoBatchId && (
           <div
             className="modal-overlay open"
-            onMouseDown={() => setShowVideoModal(false)}
+            onMouseDown={() => setAddVideoBatchId(null)}
           >
             <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <div className="modal-title">{t("wsNewVideoTitle")}</div>
                 <button
                   className="modal-close"
-                  onClick={() => setShowVideoModal(false)}
+                  onClick={() => setAddVideoBatchId(null)}
                 >
                   ✕
                 </button>
@@ -1731,6 +2190,7 @@ export default function WorkspaceView() {
               <div className="form-group">
                 <label className="form-label">{t("wsVidColName")}</label>
                 <input
+                  autoFocus
                   className="form-input"
                   value={newVideoName}
                   onChange={(e) => setNewVideoName(e.target.value)}
@@ -1743,7 +2203,7 @@ export default function WorkspaceView() {
               <div className="modal-footer">
                 <button
                   className="btn btn-ghost"
-                  onClick={() => setShowVideoModal(false)}
+                  onClick={() => setAddVideoBatchId(null)}
                 >
                   {t("cancel")}
                 </button>
@@ -1752,13 +2212,17 @@ export default function WorkspaceView() {
                   disabled={!newVideoName.trim()}
                   onClick={createNewVideo}
                 >
-                  Toevoegen
+                  {t("wsAddItem")}
                 </button>
               </div>
             </div>
           </div>
         )}
+        {deleteWorkspaceOverlay}
         {scriptShotSopOverlays}
+        {batchCreateOverlay}
+        {subBatchCreateOverlay}
+        {subBatchDeleteOverlay}
       </>
     );
   }
@@ -1826,7 +2290,9 @@ export default function WorkspaceView() {
               </thead>
               <tbody>
                 {filteredBatches.map((b) => {
-                  const videos = b.videos || [];
+                  const videos = (b.batches || []).flatMap(
+                    (sb) => sb.videos || [],
+                  );
                   const total = videos.length;
                   const done = videos.filter(
                     (v) => v.editFase === "finished",
@@ -2033,10 +2499,7 @@ export default function WorkspaceView() {
                               fontSize: 13,
                               padding: 3,
                             }}
-                            onClick={() => {
-                              if (window.confirm(t("wsConfirmDeleteBatch", { name: b.name })))
-                                deleteBatchMut.mutate(b._id);
-                            }}
+                            onClick={() => setPendingDeleteBatch(b)}
                           >
                             ✕
                           </button>
@@ -2055,133 +2518,10 @@ export default function WorkspaceView() {
       </section>
 
       {scriptShotSopOverlays}
-
-      {showBatchModal && (
-        <div
-          className="modal-overlay open"
-          onMouseDown={() => setShowBatchModal(false)}
-        >
-          <div
-            className="modal ws-create-modal"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header ws-create-modal-head">
-              <div className="modal-title" style={{ fontSize: "24px" }}>
-                {t("wsNewWorkspaceProject")}
-              </div>
-              <button
-                className="modal-close"
-                onClick={() => setShowBatchModal(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("wsProjectNameLabel")}</label>
-              <input
-                className="form-input"
-                value={newBatch.name}
-                onChange={(e) =>
-                  setNewBatch({ ...newBatch, name: e.target.value })
-                }
-                placeholder={t("wsProjectNameExample")}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("taskClientLabel")}</label>
-              <select
-                className="form-select"
-                value={newBatch.client}
-                onChange={(e) =>
-                  setNewBatch({ ...newBatch, client: e.target.value })
-                }
-              >
-                <option value="">{t("taskClientPlaceholder")}</option>
-                {clients.map((c) => (
-                  <option key={c._id} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("phase")}</label>
-              <select
-                className="form-select"
-                value={newBatch.projectStage}
-                onChange={(e) =>
-                  setNewBatch({ ...newBatch, projectStage: e.target.value })
-                }
-              >
-                <option value="development">{t("wsStage_development")}</option>
-                <option value="preproduction">{t("wsStage_preproduction")}</option>
-                <option value="shooting">{t("wsStage_shooting")}</option>
-                <option value="post-production">{t("wsStage_postproduction")}</option>
-                <option value="completed">{t("wsStage_completed")}</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("wsShootDateLabel")}</label>
-              <input
-                type="date"
-                className="form-input"
-                value={newBatch.shootDate}
-                onChange={(e) =>
-                  setNewBatch({ ...newBatch, shootDate: e.target.value })
-                }
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("wsDeadlineLabel")}</label>
-              <input
-                type="date"
-                className="form-input"
-                value={newBatch.deadline}
-                onChange={(e) =>
-                  setNewBatch({ ...newBatch, deadline: e.target.value })
-                }
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("wsLeadEditorLabel")}</label>
-              <select
-                className="form-select"
-                value={newBatch.editor}
-                onChange={(e) =>
-                  setNewBatch({ ...newBatch, editor: e.target.value })
-                }
-              >
-                {["Paolo", "Lex", "Rick", "Ray", "Boy"].map((name) => (
-                  <option key={name} value={name}>
-                    {name} — {name === "Lex" ? t("wsEditorRoleEditor") : t("team")}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="modal-footer ws-create-modal-foot">
-              <button
-                className="btn btn-ghost ws-create-modal-btn ws-create-modal-btn-ghost"
-                onClick={() => setShowBatchModal(false)}
-              >
-                {t("cancel")}
-              </button>
-              <button
-                className="btn btn-primary ws-create-modal-btn"
-                disabled={
-                  !newBatch.name.trim() ||
-                  !newBatch.client ||
-                  !newBatch.editor ||
-                  !newBatch.projectStage ||
-                  createBatchMut.isPending
-                }
-                onClick={createNewBatch}
-              >
-                {t("wsCreateProject")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {deleteWorkspaceOverlay}
+      {batchCreateOverlay}
+      {subBatchCreateOverlay}
+      {subBatchDeleteOverlay}
     </>
   );
 }

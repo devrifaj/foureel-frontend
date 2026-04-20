@@ -93,6 +93,7 @@ function TaskCardContent({
   onCancelQuickEdit,
   allowQuickEdit = false,
 }) {
+  const assigneeSelectRef = useRef(null);
   const av = assigneeLookup[task.assignee] || {
     bg: 'var(--text-3)',
     init: (task.assignee && String(task.assignee)[0]) || '?',
@@ -100,6 +101,18 @@ function TaskCardContent({
   const stopCardClick = (e) => {
     e.stopPropagation();
   };
+
+  useEffect(() => {
+    if (!allowQuickEdit || !isAssigneeEditing) return;
+    const rafId = window.requestAnimationFrame(() => {
+      const selectEl = assigneeSelectRef.current;
+      if (!selectEl) return;
+      selectEl.focus();
+      selectEl.showPicker?.();
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [allowQuickEdit, isAssigneeEditing]);
+
   return (
     <>
       <div className="task-title">{task.title}</div>
@@ -111,11 +124,15 @@ function TaskCardContent({
       <div className="task-footer">
         {allowQuickEdit && isAssigneeEditing ? (
           <select
+            ref={assigneeSelectRef}
             className="form-input"
             autoFocus
             value={task.assignee || ''}
             onPointerDown={stopCardClick}
             onClick={stopCardClick}
+            onFocus={(e) => {
+              e.currentTarget.showPicker?.();
+            }}
             onChange={(e) => {
               onAssigneeChange?.(e.target.value);
               onCancelQuickEdit?.();

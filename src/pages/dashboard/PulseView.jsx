@@ -120,6 +120,161 @@ function capacityMeter(pct, t) {
   );
 }
 
+function pulseSkeleton(width = '100%', height = 12, extraStyle = {}) {
+  return (
+    <div
+      className="pulse-skeleton"
+      style={{
+        width,
+        height,
+        borderRadius: 6,
+        ...extraStyle,
+      }}
+    />
+  );
+}
+
+function PulseViewSkeleton({ t }) {
+  const kpiSkeletonMeta = [
+    { id: 'batches', icon: '🎬', label: t('pulseKpiBatchesActive') },
+    { id: 'videos', icon: '📹', label: t('pulseKpiVideosPipeline') },
+    { id: 'shoots', icon: '📅', label: t('pulseKpiShootsPlanned') },
+    { id: 'delivered', icon: '📦', label: t('pulseKpiDeliveredEver') },
+  ];
+
+  return (
+    <section className="view active pulse-view pulse-skeleton-view" aria-busy="true" aria-live="polite">
+      <div className="page-header pulse-header">
+        <div>
+          <div className="page-title">
+            {t('pulsePageTitle')} <em>{t('pulsePageTitleEm')}</em>
+          </div>
+          <div className="page-subtitle">{t('pulseSubtitle')}</div>
+        </div>
+        <div className="pulse-header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button type="button" className="btn btn-primary" disabled>
+            {t('addEvent')}
+          </button>
+          <button type="button" className="btn btn-ghost" disabled>
+            ↺ {t('pulseRefresh')}
+          </button>
+        </div>
+      </div>
+
+      <div className="pulse-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+        {kpiSkeletonMeta.map((k) => (
+          <div className="pulse-card" key={`pulse-kpi-skeleton-${k.id}`}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--text-3)',
+                }}
+              >
+                {k.label}
+              </div>
+              <div style={{ fontSize: 20 }}>{k.icon}</div>
+            </div>
+            {pulseSkeleton('35%', 34, { marginBottom: 8, borderRadius: 8 })}
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}> </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="pulse-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <div className="pulse-card">
+          {pulseSkeleton('36%', 12, { marginBottom: 14 })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={`pulse-pipeline-skeleton-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {pulseSkeleton(110, 12)}
+                {pulseSkeleton('100%', 24)}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="pulse-card">
+          {pulseSkeleton('44%', 12, { marginBottom: 10 })}
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8, marginBottom: 18 }}>
+            {pulseSkeleton(120, 70, { borderRadius: 14 })}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {Array.from({ length: 5 }).map((_, idx) => (
+              <div key={`pulse-team-skeleton-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {pulseSkeleton(22, 22, { borderRadius: '50%' })}
+                {pulseSkeleton(88, 12)}
+                {pulseSkeleton('100%', 8, { borderRadius: 4 })}
+                {pulseSkeleton(42, 11)}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="pulse-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <div className="pulse-card">
+          {pulseSkeleton('34%', 12, { marginBottom: 12 })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={`pulse-alert-skeleton-${idx}`} style={{ borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border)' }}>
+                {pulseSkeleton('75%', 13, { marginBottom: 7 })}
+                {pulseSkeleton('100%', 11, { marginBottom: 6 })}
+                {pulseSkeleton('65%', 10)}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="pulse-card">
+          {pulseSkeleton('30%', 12, { marginBottom: 16 })}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120, marginTop: 16, padding: '0 4px' }}>
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div key={`pulse-growth-skeleton-${idx}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%' }}>
+                {pulseSkeleton('100%', `${20 + (idx % 4) * 20}%`, {
+                  marginTop: 'auto',
+                  borderRadius: '4px 4px 0 0',
+                  minHeight: 10,
+                })}
+                {pulseSkeleton('80%', 10)}
+              </div>
+            ))}
+          </div>
+          {pulseSkeleton('70%', 11, { marginTop: 10, marginInline: 'auto' })}
+        </div>
+      </div>
+
+      <div className="pulse-card pulse-client-health" style={{ marginBottom: 16 }}>
+        {pulseSkeleton('38%', 12, { marginBottom: 12 })}
+        <div className="pulse-client-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10, marginTop: 12 }}>
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <div key={`pulse-client-skeleton-${idx}`} style={{ background: 'var(--bg-alt)', borderRadius: 9, padding: '12px 14px', border: '1.5px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                {pulseSkeleton('70%', 13)}
+                {pulseSkeleton(8, 8, { borderRadius: '50%' })}
+              </div>
+              {pulseSkeleton('90%', 11, { marginBottom: 7 })}
+              {pulseSkeleton('44%', 10)}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="pulse-capacity-banner" style={{ borderRadius: 'var(--radius)', padding: '20px 28px', display: 'flex', alignItems: 'center', gap: 20, marginBottom: 8 }}>
+        {pulseSkeleton(36, 36, { borderRadius: 10 })}
+        <div style={{ flex: 1 }}>
+          {pulseSkeleton('50%', 18, { marginBottom: 7 })}
+          {pulseSkeleton('70%', 13)}
+        </div>
+        {pulseSkeleton(125, 36, { borderRadius: 10 })}
+      </div>
+    </section>
+  );
+}
+
 export default function PulseView() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -185,11 +340,7 @@ export default function PulseView() {
     );
   }
   if (isLoading) {
-    return (
-      <section className="view active">
-        <div style={{ padding: '40px', color: 'var(--text-3)' }}>{t('teamLoading')}</div>
-      </section>
-    );
+    return <PulseViewSkeleton t={t} />;
   }
   if (isError || !pulse) {
     return (

@@ -5285,6 +5285,25 @@ body.agenda-fs #fs-legend {
   align-items: center;
   gap: 7px;
 }
+.pulse-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, var(--border) 25%, rgba(255, 255, 255, 0.65) 50%, var(--border) 75%);
+  background-size: 220% 100%;
+  animation: pulse-skeleton-shimmer 1.15s ease-in-out infinite;
+}
+.pulse-skeleton-view .pulse-capacity-banner {
+  background: linear-gradient(135deg, rgba(61, 46, 38, 0.14), rgba(196, 82, 42, 0.08));
+  box-shadow: var(--shadow);
+}
+@keyframes pulse-skeleton-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -20% 0;
+  }
+}
 
 @media (max-width: 1200px) {
   .pulse-kpi-grid {

@@ -89,7 +89,7 @@ export const archiveTask = (id, archivedReason = "manual") =>
   req("POST", `/tasks/${id}/archive`, { archivedReason });
 export const restoreTask = (id) => req("POST", `/tasks/${id}/restore`);
 
-// Batches / Workspace
+// Batches / Workspace (legacy — kept for back-compat / existing Batch data)
 export const getBatches = () => req("GET", "/batches");
 export const createBatch = (data) => req("POST", "/batches", data);
 export const updateBatch = (id, data) => req("PUT", `/batches/${id}`, data);
@@ -100,6 +100,27 @@ export const updateVideo = (batchId, videoId, data) =>
   req("PUT", `/batches/${batchId}/videos/${videoId}`, data);
 export const deleteVideo = (batchId, videoId) =>
   req("DELETE", `/batches/${batchId}/videos/${videoId}`);
+
+// Workspaces (new hierarchy: Workspace → Batches → Videos)
+export const getWorkspaces = () => req("GET", "/workspaces");
+export const createWorkspace = (data) => req("POST", "/workspaces", data);
+export const updateWorkspace = (id, data) =>
+  req("PUT", `/workspaces/${id}`, data);
+export const deleteWorkspace = (id) => req("DELETE", `/workspaces/${id}`);
+
+export const addWorkspaceBatch = (wsId, data) =>
+  req("POST", `/workspaces/${wsId}/batches`, data);
+export const updateWorkspaceBatch = (wsId, bId, data) =>
+  req("PUT", `/workspaces/${wsId}/batches/${bId}`, data);
+export const deleteWorkspaceBatch = (wsId, bId) =>
+  req("DELETE", `/workspaces/${wsId}/batches/${bId}`);
+
+export const addWorkspaceVideo = (wsId, bId, data) =>
+  req("POST", `/workspaces/${wsId}/batches/${bId}/videos`, data);
+export const updateWorkspaceVideo = (wsId, bId, vId, data) =>
+  req("PUT", `/workspaces/${wsId}/batches/${bId}/videos/${vId}`, data);
+export const deleteWorkspaceVideo = (wsId, bId, vId) =>
+  req("DELETE", `/workspaces/${wsId}/batches/${bId}/videos/${vId}`);
 
 // Portal (team side)
 export const getPortalNotes = (clientId) =>
