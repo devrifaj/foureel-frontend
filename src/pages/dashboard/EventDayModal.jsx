@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom';
+import { useState } from 'react';
 import { useLang } from '../../context/LangContext';
 import { formatEventTime } from '../../utils/dateTimeFormat';
 import { getAssigneeInitials, getAssigneeMonogramStyle } from '../../utils/eventAssignee';
@@ -10,14 +11,20 @@ const TYPE_COLOR = {
   Call: 'var(--blue)',
   Delivery: 'var(--purple)',
 };
+const ITEM_COLOR = {
+  task: 'var(--blue)',
+  workspace: 'var(--purple)',
+};
 
 /**
  * Day summary: list events, add new, or open an event for editing.
  */
-export default function EventDayModal({ date, events, onClose, onAddEvent, onEventClick }) {
+export default function EventDayModal({ date, events = [], items, onClose, onAddEvent, onEventClick, onDeleteEvent, onItemClick }) {
   const { t, lang } = useLang();
   const locale = lang === 'en' ? 'en-GB' : 'nl-NL';
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
   if (!date) return null;
+  const dayItems = items ?? events.map((event) => ({ id: event._id, kind: 'event', event }));
 
   return createPortal(
     <div className="modal-overlay modal-overlay--portal open" onClick={onClose}>
@@ -29,47 +36,99 @@ export default function EventDayModal({ date, events, onClose, onAddEvent, onEve
           </button>
         </div>
         <div className="modal-body">
-          {events.length === 0 ? (
+          {dayItems.length === 0 ? (
             <p style={{ fontSize: '13px', color: 'var(--text-3)', fontStyle: 'italic' }}>
               {t('dayModalNoEvents')}
             </p>
           ) : (
-            events.map((e) => {
+            dayItems.map((item) => {
+              if (item.kind !== 'event') {
+                return (
+                  <button
+                    key={`${item.kind}-${item.id}`}
+                    type="button"
+                    className="day-event-item"
+                    onClick={() => onItemClick?.(item)}
+                  >
+                    <div className="event-dot" style={{ background: ITEM_COLOR[item.kind] || 'var(--text-3)' }} />
+                    <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                      <div className="day-event-title-row">
+                        <span className="day-event-name">{item.title}</span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>
+                        {item.kind === 'task' ? 'Task' : 'Workspace'}
+                        {item.meta ? ` · ${item.meta}` : ''}
+                      </div>
+                    </div>
+                    <span className="event-arrow">→</span>
+                  </button>
+                );
+              }
+              const e = item.event;
               const initials = getAssigneeInitials(e, { maxLength: 3 });
               const monoStyle = getAssigneeMonogramStyle(e);
-              const timeDisp = formatEventTime(e.time, locale);
+              const timeDisp = formatEventTime(e.time, locale, { hour12: true });
               return (
-                <button
+                <div
                   key={e._id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   className="day-event-item"
                   onClick={() => onEventClick?.(e)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') {
+                      ev.preventDefault();
+                      onEventClick?.(e);
+                    }
+                  }}
                 >
-                  <div className="event-dot" style={{ background: TYPE_COLOR[e.type] || 'var(--accent)' }} />
-                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                    <div className="day-event-title-row">
-                      <span className="day-event-name">{e.name}</span>
-                      {initials ? (
-                        <span
-                          className="day-event-initials"
-                          style={monoStyle}
-                          title={e.assigneeId?.name || ''}
-                        >
-                          {initials}
-                        </span>
-                      ) : null}
-                      {timeDisp ? <span className="day-event-time">{timeDisp}</span> : null}
+                  <div className="day-event-main">
+                    <div className="event-dot" style={{ background: TYPE_COLOR[e.type] || 'var(--accent)' }} />
+                    <div style={{ minWidth: 0, textAlign: 'left' }}>
+                      <div className="day-event-head">
+                        <div className="day-event-title-row">
+                          <span className="day-event-name">{e.name}</span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>
+                        {e.type}
+                        {e.client ? ` · ${e.client}` : ''}
+                      </div>
+                      {e.notes && (
+                        <div style={{ fontSize: '12px', color: 'var(--text-2)', marginTop: '4px' }}>{e.notes}</div>
+                      )}
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>
-                      {e.type}
-                      {e.client ? ` · ${e.client}` : ''}
-                    </div>
-                    {e.notes && (
-                      <div style={{ fontSize: '12px', color: 'var(--text-2)', marginTop: '4px' }}>{e.notes}</div>
-                    )}
                   </div>
-                  <span className="event-arrow">→</span>
-                </button>
+                  <div className="day-event-center">
+                    {initials ? (
+                      <span
+                        className="day-event-initials"
+                        style={monoStyle}
+                        title={e.assigneeId?.name || ''}
+                      >
+                        {initials}
+                      </span>
+                    ) : null}
+                    {timeDisp ? <span className="day-event-time">{timeDisp}</span> : null}
+                  </div>
+                  <div className="day-event-actions">
+                    {onDeleteEvent ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary day-event-delete-btn"
+                        style={{ fontSize: '11px', padding: '4px 8px', background: '#c04040', borderColor: '#c04040' }}
+                        onClick={(ev) => {
+                          ev.preventDefault();
+                          ev.stopPropagation();
+                          setDeleteCandidate(e);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    ) : null}
+                    <span className="event-arrow">→</span>
+                  </div>
+                </div>
               );
             })
           )}
@@ -83,6 +142,37 @@ export default function EventDayModal({ date, events, onClose, onAddEvent, onEve
           </button>
         </div>
       </div>
+      {deleteCandidate ? (
+        <div className="modal-overlay open" onClick={() => setDeleteCandidate(null)}>
+          <div className="modal" style={{ maxWidth: '420px' }} onClick={(ev) => ev.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">Delete event</div>
+              <button type="button" className="modal-close" onClick={() => setDeleteCandidate(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body" style={{ fontSize: '14px', color: 'var(--text-2)' }}>
+              Delete "{deleteCandidate.name || 'event'}"?
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-ghost" onClick={() => setDeleteCandidate(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ background: '#c04040', borderColor: '#c04040' }}
+                onClick={() => {
+                  onDeleteEvent?.(deleteCandidate);
+                  setDeleteCandidate(null);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>,
     document.body,
   );

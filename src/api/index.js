@@ -67,6 +67,8 @@ export const deleteClient = (id) => req("DELETE", `/clients/${id}`);
 // Team
 export const getTeamMembers = () => req("GET", "/team");
 export const createTeamMember = (data) => req("POST", "/team", data);
+export const updateTeamMember = (id, data) => req("PUT", `/team/${id}`, data);
+export const deleteTeamMember = (id) => req("DELETE", `/team/${id}`);
 
 // Events
 export const getEvents = () => req("GET", "/events");

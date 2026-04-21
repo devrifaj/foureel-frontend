@@ -4,10 +4,18 @@ import { DASHBOARD_BASE } from '../paths';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
-import { getTasks, getTeamMembers, createTeamMember } from '../api';
+import { getTasks, getTeamMembers, createTeamMember, updateTeamMember, deleteTeamMember } from '../api';
 import LoadingSpinner from '../components/LoadingSpinner';
+import FormInput from '../components/FormInput';
 
 const DEFAULT_MEMBER_FORM = {
+  email: '',
+  password: '',
+  name: '',
+  teamRole: '',
+  color: '#C8953A',
+};
+const DEFAULT_EDIT_FORM = {
   email: '',
   password: '',
   name: '',
@@ -31,6 +39,24 @@ function validateTeamMemberForm(form, t) {
   const pw = typeof form.password === 'string' ? form.password.trim() : '';
   if (!pw) errors.password = t('teamValPasswordRequired');
   else if (pw.length < 8) errors.password = t('teamValPasswordLength');
+
+  const name = form.name.trim();
+  if (!name) errors.name = t('teamValNameRequired');
+
+  const teamRole = typeof form.teamRole === 'string' ? form.teamRole.trim() : '';
+  if (!teamRole) errors.teamRole = t('teamValRoleRequired');
+
+  return errors;
+}
+
+function validateTeamMemberEditForm(form, t) {
+  const errors = {};
+  const email = form.email.trim();
+  if (!email) errors.email = t('teamValEmailRequired');
+  else if (!TEAM_EMAIL_REGEX.test(email)) errors.email = t('teamValEmailInvalid');
+
+  const pw = typeof form.password === 'string' ? form.password.trim() : '';
+  if (pw && pw.length < 8) errors.password = t('teamValPasswordLength');
 
   const name = form.name.trim();
   if (!name) errors.name = t('teamValNameRequired');
@@ -183,6 +209,11 @@ export default function Dashboard() {
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [memberForm, setMemberForm] = useState(DEFAULT_MEMBER_FORM);
   const [memberFormErrors, setMemberFormErrors] = useState({});
+  const [editMemberOpen, setEditMemberOpen] = useState(false);
+  const [deleteMemberOpen, setDeleteMemberOpen] = useState(false);
+  const [selectedMember, setSelectedMember] = useState(null);
+  const [editMemberForm, setEditMemberForm] = useState(DEFAULT_EDIT_FORM);
+  const [editMemberErrors, setEditMemberErrors] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { logout, user } = useAuth();
   const { lang, setLang, t } = useLang();
@@ -219,6 +250,31 @@ export default function Dashboard() {
       setMemberFormErrors(mapTeamMemberApiError(error?.message || '', t));
     },
   });
+  const editMemberMut = useMutation({
+    mutationFn: ({ id, payload }) => updateTeamMember(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team'] });
+      setEditMemberOpen(false);
+      setSelectedMember(null);
+      setEditMemberForm(DEFAULT_EDIT_FORM);
+      setEditMemberErrors({});
+    },
+    onError: (error) => {
+      setEditMemberErrors(mapTeamMemberApiError(error?.message || '', t));
+    },
+  });
+  const deleteMemberMut = useMutation({
+    mutationFn: deleteTeamMember,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['team'] });
+      setDeleteMemberOpen(false);
+      const deletedOwnAccount = Boolean(result?.deletedOwnAccount);
+      setSelectedMember(null);
+      if (deletedOwnAccount) {
+        logout();
+      }
+    },
+  });
 
   const patchMemberForm = (field, value) => {
     setMemberForm((f) => ({ ...f, [field]: value }));
@@ -237,6 +293,24 @@ export default function Dashboard() {
     setMemberFormErrors({});
     setAddMemberOpen(true);
   };
+  const openEditMemberModal = (member) => {
+    editMemberMut.reset();
+    setSelectedMember(member);
+    setEditMemberForm({
+      email: member?.email || '',
+      password: '',
+      name: member?.name || '',
+      teamRole: member?.teamRole || '',
+      color: member?.color || '#C8953A',
+    });
+    setEditMemberErrors({});
+    setEditMemberOpen(true);
+  };
+  const openDeleteMemberModal = (member) => {
+    deleteMemberMut.reset();
+    setSelectedMember(member);
+    setDeleteMemberOpen(true);
+  };
 
   const handleSubmitTeamMember = () => {
     const errors = validateTeamMemberForm(memberForm, t);
@@ -249,6 +323,35 @@ export default function Dashboard() {
       teamRole: memberForm.teamRole.trim(),
       color: memberForm.color,
     });
+  };
+  const patchEditMemberForm = (field, value) => {
+    setEditMemberForm((f) => ({ ...f, [field]: value }));
+    setEditMemberErrors((prev) => {
+      if (!prev[field] && !prev._general) return prev;
+      const next = { ...prev };
+      delete next[field];
+      delete next._general;
+      return next;
+    });
+  };
+  const handleSubmitEditMember = () => {
+    if (!selectedMember?._id) return;
+    const errors = validateTeamMemberEditForm(editMemberForm, t);
+    setEditMemberErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    const payload = {
+      email: editMemberForm.email.trim(),
+      name: editMemberForm.name.trim(),
+      teamRole: editMemberForm.teamRole.trim(),
+      color: editMemberForm.color,
+    };
+    const password = editMemberForm.password.trim();
+    if (password) payload.password = password;
+    editMemberMut.mutate({ id: selectedMember._id, payload });
+  };
+  const handleConfirmDeleteMember = () => {
+    if (!selectedMember?._id) return;
+    deleteMemberMut.mutate(selectedMember._id);
   };
   const openCount = tasks.filter((task) => task.column !== 'klaar').length;
   const visibleSections = NAV_SECTIONS
@@ -387,6 +490,34 @@ export default function Dashboard() {
                         {m.name}
                         {m.teamRole ? ` · ${m.teamRole}` : ''}
                       </span>
+                      <div className="team-member-actions">
+                        <button
+                          type="button"
+                          className="team-member-action-btn"
+                          onClick={() => openEditMemberModal(m)}
+                          title={t('teamEditTooltip')}
+                          aria-label={t('teamEditTooltip')}
+                        >
+                          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+                            <path d="M2 11.5V14h2.5L12.9 5.6 10.4 3.1 2 11.5z" />
+                            <path d="M9.7 3.8 12.2 6.3" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="team-member-action-btn team-member-action-btn--danger"
+                          onClick={() => openDeleteMemberModal(m)}
+                          title={t('teamDeleteTooltip')}
+                          aria-label={t('teamDeleteTooltip')}
+                        >
+                          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+                            <path d="M3 4h10" />
+                            <path d="M6 4V2.8c0-.4.3-.8.8-.8h2.4c.5 0 .8.4.8.8V4" />
+                            <path d="M4.5 4l.6 9.2c0 .5.4.8.9.8h4c.5 0 .9-.3.9-.8L11.5 4" />
+                            <path d="M6.8 7v4.5M9.2 7v4.5" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   ))
                 : null}
@@ -472,26 +603,19 @@ export default function Dashboard() {
                 ) : null}
               </div>
               <div className="form-group">
-                <label className="form-label" htmlFor="team-add-password">
-                  {t('teamPasswordLabel')}
-                </label>
-                <input
+                <FormInput
+                  label={t('teamPasswordLabel')}
                   id="team-add-password"
                   type="password"
-                  className="form-input"
+                  className="form-group"
+                  inputClassName="form-input"
                   autoComplete="new-password"
                   value={memberForm.password}
                   onChange={(e) => patchMemberForm('password', e.target.value)}
                   placeholder={t('teamPasswordHint')}
                   style={memberFormErrors.password ? teamMemberErrBorder : undefined}
-                  aria-invalid={Boolean(memberFormErrors.password)}
-                  aria-describedby={memberFormErrors.password ? 'team-add-password-err' : undefined}
+                  errorMessage={memberFormErrors.password}
                 />
-                {memberFormErrors.password ? (
-                  <div id="team-add-password-err" className="form-field-error" role="alert">
-                    {memberFormErrors.password}
-                  </div>
-                ) : null}
               </div>
               <div className="form-group">
                 <label className="form-label" htmlFor="team-add-name">
@@ -623,6 +747,130 @@ export default function Dashboard() {
                 }}
               >
                 {t('logout')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {editMemberOpen && (
+        <div className="modal-overlay open" onClick={() => setEditMemberOpen(false)}>
+          <div className="modal" style={{ maxWidth: '460px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">{t('editTeamMemberTitle')}</div>
+              <button type="button" className="modal-close" onClick={() => setEditMemberOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label" htmlFor="team-edit-email">
+                  {t('teamEmailLabel')}
+                </label>
+                <input
+                  id="team-edit-email"
+                  type="email"
+                  className="form-input"
+                  autoComplete="off"
+                  value={editMemberForm.email}
+                  onChange={(e) => patchEditMemberForm('email', e.target.value)}
+                  style={editMemberErrors.email ? teamMemberErrBorder : undefined}
+                />
+                {editMemberErrors.email ? <div className="form-field-error">{editMemberErrors.email}</div> : null}
+              </div>
+              <div className="form-group">
+                <FormInput
+                  label={t('teamPasswordLabel')}
+                  id="team-edit-password"
+                  type="password"
+                  className="form-group"
+                  inputClassName="form-input"
+                  autoComplete="new-password"
+                  value={editMemberForm.password}
+                  onChange={(e) => patchEditMemberForm('password', e.target.value)}
+                  placeholder={t('teamPasswordOptionalHint')}
+                  style={editMemberErrors.password ? teamMemberErrBorder : undefined}
+                  errorMessage={editMemberErrors.password}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="team-edit-name">
+                  {t('teamNameLabel')}
+                </label>
+                <input
+                  id="team-edit-name"
+                  type="text"
+                  className="form-input"
+                  value={editMemberForm.name}
+                  onChange={(e) => patchEditMemberForm('name', e.target.value)}
+                  style={editMemberErrors.name ? teamMemberErrBorder : undefined}
+                />
+                {editMemberErrors.name ? <div className="form-field-error">{editMemberErrors.name}</div> : null}
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="team-edit-role">
+                  {t('teamRoleLabel')}
+                </label>
+                <input
+                  id="team-edit-role"
+                  type="text"
+                  className="form-input"
+                  value={editMemberForm.teamRole}
+                  onChange={(e) => patchEditMemberForm('teamRole', e.target.value)}
+                  style={editMemberErrors.teamRole ? teamMemberErrBorder : undefined}
+                />
+                {editMemberErrors.teamRole ? <div className="form-field-error">{editMemberErrors.teamRole}</div> : null}
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" htmlFor="team-edit-color">
+                  {t('teamColorLabel')}
+                </label>
+                <input
+                  id="team-edit-color"
+                  type="color"
+                  className="form-input"
+                  style={{ height: '40px', padding: '4px', cursor: 'pointer' }}
+                  value={editMemberForm.color}
+                  onChange={(e) => patchEditMemberForm('color', e.target.value)}
+                />
+              </div>
+              {editMemberErrors._general ? (
+                <div className="form-field-error" role="alert" style={{ marginTop: '8px' }}>
+                  {editMemberErrors._general}
+                </div>
+              ) : null}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-ghost" onClick={() => setEditMemberOpen(false)} disabled={editMemberMut.isPending}>
+                {t('cancel')}
+              </button>
+              <button type="button" className="btn btn-primary" onClick={handleSubmitEditMember} disabled={editMemberMut.isPending}>
+                {editMemberMut.isPending ? t('teamLoading') : t('save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteMemberOpen && (
+        <div className="modal-overlay open" onClick={() => setDeleteMemberOpen(false)}>
+          <div className="modal" style={{ maxWidth: '460px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">{t('teamDeleteConfirmTitle')}</div>
+              <button type="button" className="modal-close" onClick={() => setDeleteMemberOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '14px', color: 'var(--text-2)', margin: 0, lineHeight: 1.5 }}>
+                {t('teamDeleteConfirmBody').replace('{name}', selectedMember?.name || '')}
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-ghost" onClick={() => setDeleteMemberOpen(false)} disabled={deleteMemberMut.isPending}>
+                {t('cancel')}
+              </button>
+              <button type="button" className="btn btn-primary" onClick={handleConfirmDeleteMember} disabled={deleteMemberMut.isPending}>
+                {deleteMemberMut.isPending ? t('teamLoading') : t('delete')}
               </button>
             </div>
           </div>

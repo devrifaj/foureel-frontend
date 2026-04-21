@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../context/AuthContext";
 import { useLang } from "../../context/LangContext";
@@ -182,6 +182,8 @@ export default function WorkspaceView() {
   const [resDraftName, setResDraftName] = useState("");
   const [resDraftNote, setResDraftNote] = useState("");
   const shotOverlayRef = useRef(null);
+  const navigate = useNavigate();
+  const { batchId: routeBatchId } = useParams();
   const qc = useQueryClient();
 
   const { data: batches = [], isLoading: isWorkspacesLoading } = useQuery({
@@ -305,6 +307,20 @@ export default function WorkspaceView() {
       return bd - ad;
     });
   }, [batches, wsTab]);
+
+  useEffect(() => {
+    if (routeBatchId) {
+      setBatchId(routeBatchId);
+      return;
+    }
+    setBatchId(null);
+  }, [routeBatchId]);
+
+  useEffect(() => {
+    if (!routeBatchId || batches.length === 0) return;
+    const exists = batches.some((entry) => entry._id === routeBatchId);
+    if (!exists) navigate("/dashboard/workspace", { replace: true });
+  }, [routeBatchId, batches, navigate]);
 
   const scriptWords = useMemo(
     () => (scriptDraft.trim() ? scriptDraft.trim().split(/\s+/).length : 0),
@@ -1319,7 +1335,7 @@ export default function WorkspaceView() {
             <div className="ws-detail-breadcrumbs">
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => setBatchId(null)}
+                onClick={() => navigate("/dashboard/workspace")}
               >
                 {t("wsBackAllWorkspaces")}
               </button>
@@ -2397,7 +2413,7 @@ export default function WorkspaceView() {
                     <tr
                       key={b._id}
                       className="ws-tr"
-                      onClick={() => setBatchId(b._id)}
+                      onClick={() => navigate(`/dashboard/workspace/${b._id}`)}
                     >
                       <td className="ws-td">
                         <div className="ws-td-inner">

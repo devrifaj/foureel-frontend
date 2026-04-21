@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLang } from '../../context/LangContext';
-import { getEvents, getClients, getTeamMembers, createEvent, updateEvent } from '../../api';
+import { getEvents, getClients, getTeamMembers, createEvent, updateEvent, deleteEvent, getTasks, getWorkspaces } from '../../api';
+import { DASHBOARD_BASE } from '../../paths';
 import EventDayModal from './EventDayModal';
 import EventFormModal from '../../components/EventFormModal';
 import { sortEventsBySchedule, formatEventTime } from '../../utils/dateTimeFormat';
@@ -13,8 +15,25 @@ const MONTHS = ['Januari','Februari','Maart','April','Mei','Juni','Juli','August
 const TYPE_CLS = { Shoot:'chip-shoot', Edit:'chip-edit', Deadline:'chip-deadline', Call:'chip-call', Delivery:'chip-delivery' };
 
 function dStr(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function toDateString(value) {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/\./g, '-');
+  const dmyMatch = normalized.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/);
+  if (dmyMatch) {
+    const [, dd, mm, yyyy] = dmyMatch;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  const short = trimmed.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(short)) return short;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return dStr(parsed);
+}
 
 export default function AgendaView() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { t, lang } = useLang();
   const isTeam = user?.role === 'team';
@@ -31,6 +50,8 @@ export default function AgendaView() {
 
   const { data: events = [], isLoading: eventsLoading } = useQuery({ queryKey: ['events'], queryFn: getEvents, enabled: isTeam });
   const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: getClients, enabled: isTeam });
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({ queryKey: ['tasks'], queryFn: getTasks, enabled: isTeam });
+  const { data: workspaces = [], isLoading: workspacesLoading } = useQuery({ queryKey: ['workspaces'], queryFn: getWorkspaces, enabled: isTeam });
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['team'],
     queryFn: getTeamMembers,
@@ -49,6 +70,13 @@ export default function AgendaView() {
       setEditingEventId(null);
       setDayModal(null);
       setForm(emptyEventForm());
+    },
+  });
+  const deleteEventMut = useMutation({
+    mutationFn: (id) => deleteEvent(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['events'] });
+      setDayModal(null);
     },
   });
 
@@ -87,8 +115,36 @@ export default function AgendaView() {
   const monthLabel = `${MONTHS[calMonth]} ${calYear}`;
   const fsTodayLabel = today.toLocaleDateString('nl-NL', { weekday: 'short', day: '2-digit', month: 'short' });
 
-  const openDayModal = (ds, dayEvs) => {
-    setDayModal({ date: ds, events: sortEventsBySchedule(dayEvs) });
+  const getDayItems = (ds) => {
+    const dayEvents = sortEventsBySchedule(events.filter((e) => e.date === ds)).map((event) => ({
+      id: event._id,
+      kind: 'event',
+      event,
+    }));
+    const dayTasks = tasks
+      .filter((task) => toDateString(task.dueDate) === ds)
+      .map((task) => ({
+        id: task._id,
+        kind: 'task',
+        title: task.title || 'Task',
+        meta: task.assignee || task.client || '',
+      }));
+    const dayWorkspaces = workspaces
+      .filter((workspace) => {
+        const workspaceDate = toDateString(workspace.deadline) || toDateString(workspace.shootDate);
+        return workspaceDate === ds;
+      })
+      .map((workspace) => ({
+        id: workspace._id,
+        kind: 'workspace',
+        title: workspace.name || 'Workspace',
+        meta: workspace.client || workspace.editor || '',
+      }));
+    return [...dayEvents, ...dayTasks, ...dayWorkspaces];
+  };
+
+  const openDayModal = (ds) => {
+    setDayModal({ date: ds, items: getDayItems(ds) });
   };
 
   const openCreateFromDay = (ds) => {
@@ -110,6 +166,26 @@ export default function AgendaView() {
     setEventModalOpen(false);
     setEditingEventId(null);
     setForm(emptyEventForm());
+  };
+
+  const handleDeleteEvent = (event) => {
+    if (!event?._id || deleteEventMut.isPending) return;
+    deleteEventMut.mutate(event._id);
+  };
+  const handleDayItemClick = (item) => {
+    if (item.kind === 'task') {
+      setDayModal(null);
+      navigate(`${DASHBOARD_BASE}/taken`);
+      return;
+    }
+    if (item.kind === 'workspace') {
+      setDayModal(null);
+      navigate(`${DASHBOARD_BASE}/workspace/${item.id}`);
+    }
+  };
+  const handleEventItemNavigate = () => {
+    setDayModal(null);
+    navigate(`${DASHBOARD_BASE}/agenda`);
   };
 
   return (
@@ -191,58 +267,76 @@ export default function AgendaView() {
           {Array.from({length:dim},(_,i)=>i+1).map(day => {
             const ds = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
             const dayEvs = sortEventsBySchedule(events.filter(e => e.date === ds));
+            const dayItems = getDayItems(ds);
             const isT = ds === todayStr;
             return (
               <div key={day}
-                onClick={() => openDayModal(ds, dayEvs)}
+                onClick={() => openDayModal(ds)}
                 className={`cal-cell${isT ? ' today' : ''}`}
               >
                 <div className="cal-day-num">{day}</div>
                 <div className="cal-cell-chips">
-                  {eventsLoading ? (
+                  {eventsLoading || tasksLoading || workspacesLoading ? (
                     Array.from({ length: 2 }).map((_, idx) => (
                       <div key={`${ds}-agenda-chip-skeleton-${idx}`} className="chip event-chip-row event-chip-skeleton" aria-hidden>
                         <span className="event-chip-name home-skeleton-line home-skeleton-shimmer" />
                         <span className="event-chip-time home-skeleton-line home-skeleton-shimmer" />
                       </div>
                     ))
-                  ) : dayEvs.slice(0,3).map(e => {
-                    const initials = getAssigneeInitials(e, { maxLength: 2 });
-                    const monoStyle = getAssigneeMonogramStyle(e);
-                    const assigneeName = e.assigneeId && typeof e.assigneeId === 'object' ? e.assigneeId.name : '';
-                    const timeDisp = formatEventTime(e.time, locale, { hour12: true });
+                  ) : dayItems.slice(0,3).map((item) => {
+                    if (item.kind === 'event') {
+                      const e = item.event;
+                      const initials = getAssigneeInitials(e, { maxLength: 2 });
+                      const monoStyle = getAssigneeMonogramStyle(e);
+                      const assigneeName = e.assigneeId && typeof e.assigneeId === 'object' ? e.assigneeId.name : '';
+                      const timeDisp = formatEventTime(e.time, locale, { hour12: true });
+                      return (
+                        <div
+                          key={e._id}
+                          role={isTeam ? 'button' : undefined}
+                          tabIndex={isTeam ? 0 : undefined}
+                          className={`chip event-chip-row ${TYPE_CLS[e.type]||'chip-shoot'}`}
+                          style={{ overflow: 'hidden' }}
+                          title={e.name}
+                          onClick={(ev) => {
+                            ev.stopPropagation();
+                            if (isTeam) openDayModal(ds);
+                          }}
+                          onKeyDown={(ev) => {
+                            if (!isTeam) return;
+                            if (ev.key === 'Enter' || ev.key === ' ') {
+                              ev.preventDefault();
+                              ev.stopPropagation();
+                              openDayModal(ds);
+                            }
+                          }}
+                        >
+                          <span className="event-chip-name">{e.name}</span>
+                          {initials ? (
+                            <span className="event-chip-ini" style={monoStyle} title={assigneeName || undefined}>
+                              {initials}
+                            </span>
+                          ) : null}
+                          {timeDisp ? <span className="event-chip-time">{timeDisp}</span> : null}
+                        </div>
+                      );
+                    }
                     return (
                       <div
-                        key={e._id}
-                        role={isTeam ? 'button' : undefined}
-                        tabIndex={isTeam ? 0 : undefined}
-                        className={`chip event-chip-row ${TYPE_CLS[e.type]||'chip-shoot'}`}
-                        style={{ overflow: 'hidden' }}
-                        title={e.name}
-                        onClick={(ev) => {
-                          ev.stopPropagation();
-                          if (isTeam) openDayModal(ds, dayEvs);
-                        }}
-                        onKeyDown={(ev) => {
-                          if (!isTeam) return;
-                          if (ev.key === 'Enter' || ev.key === ' ') {
-                            ev.preventDefault();
-                            ev.stopPropagation();
-                            openDayModal(ds, dayEvs);
-                          }
-                        }}
+                        key={`${item.kind}-${item.id}`}
+                        className="chip event-chip-row"
+                        style={{ background: 'var(--bg-alt)', color: 'var(--text-2)' }}
+                        title={item.title}
                       >
-                        <span className="event-chip-name">{e.name}</span>
-                        {initials ? (
-                          <span className="event-chip-ini" style={monoStyle} title={assigneeName || undefined}>
-                            {initials}
-                          </span>
-                        ) : null}
-                        {timeDisp ? <span className="event-chip-time">{timeDisp}</span> : null}
+                        <span className="event-chip-name">
+                          {item.kind === 'task' ? 'Task: ' : 'Workspace: '}
+                          {item.title}
+                        </span>
+                        {item.meta ? <span className="event-chip-time">{item.meta}</span> : null}
                       </div>
                     );
                   })}
-                  {!eventsLoading && dayEvs.length>3 && <div className="chip" style={{background:'var(--bg-alt)',color:'var(--text-3)'}}>+{dayEvs.length-3}</div>}
+                  {!eventsLoading && !tasksLoading && !workspacesLoading && dayItems.length>3 && <div className="chip" style={{background:'var(--bg-alt)',color:'var(--text-3)'}}>+{dayItems.length-3}</div>}
                 </div>
               </div>
             );
@@ -252,10 +346,13 @@ export default function AgendaView() {
 
       <EventDayModal
         date={dayModal?.date ?? null}
-        events={dayModal?.events ?? []}
+        events={(dayModal?.items ?? []).filter((item) => item.kind === 'event').map((item) => item.event)}
+        items={dayModal?.items ?? []}
         onClose={() => setDayModal(null)}
         onAddEvent={openCreateFromDay}
-        onEventClick={openEditEvent}
+        onEventClick={handleEventItemNavigate}
+        onDeleteEvent={handleDeleteEvent}
+        onItemClick={handleDayItemClick}
       />
 
       <EventFormModal

@@ -16,17 +16,7 @@ import {
 } from '../../api';
 import { useLang } from '../../context/LangContext';
 import LoadingSpinner from '../../components/LoadingSpinner';
-
-const PHASE_OPTIONS = [
-  { value: 'Pre-prod', label: 'Pre-productie' },
-  { value: 'Shoot', label: 'Shoot' },
-  { value: 'Productie', label: 'Productie' },
-  { value: 'Edit', label: 'Edit' },
-  { value: 'Nabewerking', label: 'Nabewerking' },
-  { value: 'Post', label: 'Post' },
-  { value: 'Review', label: 'Review' },
-  { value: 'Delivery', label: 'Delivery' },
-];
+import FormInput from '../../components/FormInput';
 
 const ACCENT_COLORS = ['#C4522A', '#3A6EA8', '#7A9E7E', '#7A5EA8', '#C8953A', '#5E8A6E', '#E07830'];
 
@@ -569,13 +559,10 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onClearServerError }) {
   const [name, setName] = useState('');
   const [sector, setSector] = useState('');
-  const [phase, setPhase] = useState('Pre-prod');
   const [contact, setContact] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [since, setSince] = useState('');
-  const [urgent, setUrgent] = useState(false);
-  const [urgentReason, setUrgentReason] = useState('');
   const [portalEmail, setPortalEmail] = useState('');
   const [portalPassword, setPortalPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -584,13 +571,10 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
     if (open) {
       setName('');
       setSector('');
-      setPhase('Pre-prod');
       setContact('');
       setEmail('');
       setPhone('');
       setSince('');
-      setUrgent(false);
-      setUrgentReason('');
       setPortalEmail('');
       setPortalPassword('');
       setFieldErrors({});
@@ -615,9 +599,6 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
     if (!name.trim()) err.name = en ? 'Enter a company name.' : 'Vul een bedrijfsnaam in.';
     const em = email.trim();
     if (em && !EMAIL_REGEX.test(em)) err.email = en ? 'Enter a valid email address.' : 'Vul een geldig e-mailadres in.';
-    if (urgent && !urgentReason.trim()) {
-      err.urgentReason = en ? 'Enter a reason for urgency.' : 'Vul een reden voor urgentie in.';
-    }
     const pe = portalEmail.trim().toLowerCase();
     const pp = portalPassword.trim();
     if (pe && !EMAIL_REGEX.test(pe)) {
@@ -643,13 +624,10 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
     onSave({
       name: name.trim(),
       sector: sector.trim() || undefined,
-      phase,
       contact: contact.trim() || undefined,
       email: em ? em : undefined,
       phone: phone.trim() || undefined,
       since: since || undefined,
-      urgent,
-      urgentReason: urgent ? urgentReason.trim() || undefined : undefined,
       color: pickColor(name),
       portalEmail: pe || undefined,
       portalPassword: pp || undefined,
@@ -702,23 +680,6 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
               }}
               placeholder="bijv. Fitness & Wellness"
             />
-          </div>
-          <div className="form-group">
-            <label className="form-label">{lang === 'en' ? 'Current phase' : 'Huidige fase'}</label>
-            <select
-              className="form-select"
-              value={phase}
-              onChange={(e) => {
-                setPhase(e.target.value);
-                clearServerError();
-              }}
-            >
-              {PHASE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
           </div>
           <div className="form-group">
             <label className="form-label">{lang === 'en' ? 'Contact person' : 'Contactpersoon'}</label>
@@ -804,12 +765,12 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
             )}
           </div>
           <div className="form-group">
-            <label className="form-label">
-              {lang === 'en' ? 'Portal login password (optional)' : 'Portaal login wachtwoord (optioneel)'}
-            </label>
-            <input
-              className="form-input"
+            <FormInput
+              className="form-group"
+              inputClassName="form-input"
+              id="add-client-portal-password"
               type="password"
+              label={lang === 'en' ? 'Portal login password (optional)' : 'Portaal login wachtwoord (optioneel)'}
               value={portalPassword}
               onChange={(e) => {
                 setPortalPassword(e.target.value);
@@ -818,81 +779,10 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
                 clearServerError();
               }}
               placeholder={lang === 'en' ? 'Only with portal email, min. 8 characters' : 'Alleen met portaal-e-mail, min. 8 tekens'}
-              aria-invalid={!!fieldErrors.portalPassword}
-              aria-describedby={fieldErrors.portalPassword ? 'add-client-portal-pw-err' : undefined}
               style={inputErrBorder('portalPassword')}
+              errorMessage={fieldErrors.portalPassword}
             />
-            {fieldErrors.portalPassword && (
-              <p id="add-client-portal-pw-err" role="alert" style={fieldErrStyle}>
-                {fieldErrors.portalPassword}
-              </p>
-            )}
           </div>
-        </div>
-        <hr className="form-divider" />
-        <div className="toggle-row">
-          <span className="toggle-label">{lang === 'en' ? 'Urgent — requires immediate attention' : 'Urgent — vereist directe aandacht'}</span>
-          <label className="toggle-switch" style={{ position: 'relative' }}>
-            {/* Global CSS uses display:none on .toggle-switch input — that breaks label clicks in some cases; overlay an invisible clickable input */}
-            <input
-              type="checkbox"
-              checked={urgent}
-              onChange={(e) => {
-                setUrgent(e.target.checked);
-                clearServerError();
-              }}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                margin: 0,
-                opacity: 0,
-                cursor: 'pointer',
-                zIndex: 3,
-                display: 'block',
-              }}
-              aria-label={lang === 'en' ? 'Mark client as urgent' : 'Klant als urgent markeren'}
-            />
-            <div className="toggle-track" style={{ pointerEvents: 'none' }} />
-            <div className="toggle-thumb" style={{ pointerEvents: 'none' }} />
-          </label>
-        </div>
-        <div className="form-group" style={{ marginBottom: urgent ? undefined : 0 }}>
-          <label className="form-label">
-            {lang === 'en' ? 'Reason' : 'Reden urgentie'}
-            {urgent ? <span style={{ color: '#c04040' }}> *</span> : null}
-          </label>
-          <input
-            className="form-input"
-            value={urgentReason}
-            onChange={(e) => {
-              setUrgentReason(e.target.value);
-              if (fieldErrors.urgentReason) setErr('urgentReason', '');
-              clearServerError();
-            }}
-            placeholder={lang === 'en' ? 'e.g. Missed deadline' : 'bijv. Deadline overschreden'}
-            disabled={!urgent}
-            style={
-              !urgent
-                ? { opacity: 0.55, cursor: 'not-allowed' }
-                : inputErrBorder('urgentReason')
-            }
-            aria-invalid={urgent && !!fieldErrors.urgentReason}
-            aria-describedby={urgent && fieldErrors.urgentReason ? 'add-client-urgent-err' : undefined}
-          />
-          {urgent && fieldErrors.urgentReason && (
-            <p id="add-client-urgent-err" role="alert" style={fieldErrStyle}>
-              {fieldErrors.urgentReason}
-            </p>
-          )}
-          {!urgent && (
-            <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '8px', marginBottom: 0 }}>
-              {lang === 'en'
-                ? 'Turn on “Urgent” above to enter a reason.'
-                : 'Zet hierboven “Urgent” aan om een reden in te vullen.'}
-            </p>
-          )}
         </div>
         {serverError && (
           <p
@@ -1051,10 +941,12 @@ function PortalAccessModal({ open, onClose, onSave, saving, lang, currentEmail, 
           )}
         </div>
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">{lang === 'en' ? 'New password (optional)' : 'Nieuw wachtwoord (optioneel)'}</label>
-          <input
-            className="form-input"
+          <FormInput
+            className="form-group"
+            inputClassName="form-input"
+            id="portal-access-password"
             type="password"
+            label={lang === 'en' ? 'New password (optional)' : 'Nieuw wachtwoord (optioneel)'}
             value={portalPassword}
             onChange={(e) => {
               setPortalPassword(e.target.value);
@@ -1062,15 +954,9 @@ function PortalAccessModal({ open, onClose, onSave, saving, lang, currentEmail, 
               onClearServerError?.();
             }}
             placeholder={lang === 'en' ? 'Only fill to set/reset password' : 'Alleen invullen om wachtwoord te zetten/resetten'}
-            aria-invalid={!!fieldErrors.portalPassword}
-            aria-describedby={fieldErrors.portalPassword ? 'portal-access-pw-err' : undefined}
             style={portalInputErr('portalPassword')}
+            errorMessage={fieldErrors.portalPassword}
           />
-          {fieldErrors.portalPassword && (
-            <p id="portal-access-pw-err" role="alert" style={fieldErrStyle}>
-              {fieldErrors.portalPassword}
-            </p>
-          )}
         </div>
         {serverError && (
           <p role="alert" style={{ ...fieldErrStyle, marginTop: '10px' }}>

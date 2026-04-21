@@ -560,6 +560,41 @@ ul {
   font-size: 12px;
   transition: all var(--transition);
 }
+.team-member-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition);
+}
+.team-member-action-btn {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(250, 247, 242, 0.78);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.team-member-action-btn svg {
+  width: 12px;
+  height: 12px;
+}
+.team-member-action-btn:hover {
+  color: rgba(250, 247, 242, 0.95);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+.team-member-action-btn--danger:hover {
+  color: #ffb4b4;
+  border-color: rgba(255, 120, 120, 0.5);
+}
 .team-member-pill-text {
   min-width: 0;
   overflow: hidden;
@@ -635,6 +670,17 @@ ul {
 .team-member-pill:hover {
   background: var(--sidebar-hover);
   color: rgba(250, 247, 242, 0.8);
+}
+.team-member-pill:hover .team-member-actions,
+.team-member-pill:focus-within .team-member-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: none), (pointer: coarse) {
+  .team-member-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 .avatar {
   width: 26px;
@@ -6190,7 +6236,7 @@ body.agenda-fs #fs-legend {
 /* day modal */
 .day-event-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   padding: 12px 10px;
   border-bottom: 1px solid var(--border);
@@ -6218,12 +6264,50 @@ body.agenda-fs #fs-legend {
   color: var(--accent);
   transform: translateX(2px);
 }
+.day-event-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.day-event-main > div:last-child {
+  min-width: 0;
+  flex: 1;
+}
+.day-event-center {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.day-event-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.day-event-delete-btn {
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+.day-event-delete-btn:hover {
+  transform: scale(1.02);
+  box-shadow: 0 3px 8px rgba(192, 64, 64, 0.25);
+}
+.day-event-delete-btn:active {
+  transform: scale(0.98);
+}
 .event-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
-  margin-top: 4px;
+  margin-top: 0;
+  align-self: center;
 }
 
 .day-event-title-row {
@@ -6234,6 +6318,15 @@ body.agenda-fs #fs-legend {
   min-width: 0;
   margin-bottom: 2px;
 }
+.day-event-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.day-event-head .day-event-title-row {
+  margin-bottom: 0;
+}
 .day-event-name {
   flex: 1;
   min-width: 0;
@@ -6242,6 +6335,12 @@ body.agenda-fs #fs-legend {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.day-event-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 .day-event-initials {
   display: inline-flex;
@@ -6265,6 +6364,8 @@ body.agenda-fs #fs-legend {
   box-shadow: 0 1px 2px rgba(28, 20, 16, 0.06);
 }
 .day-event-time {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
   font-size: 12px;
   font-weight: 600;

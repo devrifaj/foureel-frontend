@@ -330,6 +330,7 @@ export default function TakenView() {
   const [activeId, setActiveId] = useState(null);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [taskModal, setTaskModal] = useState(null);
+  const [confirmDeleteTask, setConfirmDeleteTask] = useState(null);
   const [newModal, setNewModal] = useState(false);
   const [toast, setToast] = useState(null);
   const [quickEditTaskId, setQuickEditTaskId] = useState(null);
@@ -519,6 +520,27 @@ export default function TakenView() {
     },
     onSettled: () => {
       setTimeout(() => setToast(null), 1800);
+    },
+  });
+  const softDeleteMut = useMutation({
+    mutationFn: ({ id }) => updateTask(id, { status: 'delete' }),
+    onMutate: async ({ id }) => {
+      await qc.cancelQueries({ queryKey: ['tasks'] });
+      const previousTasks = qc.getQueryData(['tasks']) || [];
+      qc.setQueryData(['tasks'], (current = []) =>
+        current.filter((task) => task._id !== id),
+      );
+      setConfirmDeleteTask(null);
+      setTaskModal(null);
+      return { previousTasks };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousTasks) {
+        qc.setQueryData(['tasks'], context.previousTasks);
+      }
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
 
@@ -836,7 +858,7 @@ export default function TakenView() {
             <div className="modal-footer">
               <button
                 type="button"
-                 className="btn btn-primary"
+                className="btn btn-primary"
                 style={{ marginRight: 'auto' }}
                 onClick={() =>
                   archiveMut.mutate({
@@ -846,6 +868,15 @@ export default function TakenView() {
                 }
               >
                 {t('archive')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setConfirmDeleteTask(taskModal)}
+                disabled={softDeleteMut.isPending}
+                style={{ color: '#dc2626', borderColor: '#fecaca' }}
+              >
+                {t('delete')}
               </button>
               <button type="button" className="btn btn-ghost" onClick={() => setTaskModal(null)}>{t('close')}</button>
 
@@ -885,6 +916,50 @@ export default function TakenView() {
                   </>
                 ) : (
                   t('save')
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteTask && (
+        <div className="modal-overlay open" onClick={() => setConfirmDeleteTask(null)}>
+          <div className="modal" style={{ maxWidth: '460px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">{t('taskDeleteConfirmTitle')}</div>
+              <button type="button" className="modal-close" onClick={() => setConfirmDeleteTask(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0, color: 'var(--text-2)', fontSize: '14px', lineHeight: 1.5 }}>
+                {t('taskDeleteConfirmBody', { name: confirmDeleteTask.title })}
+              </p>
+              <p style={{ margin: '10px 0 0 0', color: 'var(--text-3)', fontSize: '12px' }}>
+                {t('taskDeleteConfirmHint')}
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-ghost" onClick={() => setConfirmDeleteTask(null)}>
+                {t('cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => softDeleteMut.mutate({ id: confirmDeleteTask._id })}
+                disabled={softDeleteMut.isPending}
+                style={
+                  softDeleteMut.isPending
+                    ? { display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#dc2626', borderColor: '#dc2626' }
+                    : { background: '#dc2626', borderColor: '#dc2626' }
+                }
+              >
+                {softDeleteMut.isPending ? (
+                  <>
+                    <LoadingSpinner size={18} />
+                    <span>{t('delete')}</span>
+                  </>
+                ) : (
+                  t('delete')
                 )}
               </button>
             </div>

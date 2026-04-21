@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { DASHBOARD_BASE } from '../../paths';
 import { useLang } from '../../context/LangContext';
 import { useAuth } from '../../context/AuthContext';
-import { getClients, getTasks, getEvents, getActivity, createEvent, updateEvent, getTeamMembers } from '../../api';
+import { getClients, getTasks, getEvents, getActivity, createEvent, updateEvent, deleteEvent, getTeamMembers, getWorkspaces } from '../../api';
 import { useState, useMemo } from 'react';
 import EventDayModal from './EventDayModal';
 import EventFormModal from '../../components/EventFormModal';
@@ -21,8 +21,24 @@ function getMon(d) {
 }
 function dStr(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function sameD(a,b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+function toDateString(value) {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/\./g, '-');
+  const dmyMatch = normalized.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/);
+  if (dmyMatch) {
+    const [, dd, mm, yyyy] = dmyMatch;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  const short = trimmed.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(short)) return short;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return dStr(parsed);
+}
 
-function WeekGrid({ start, events, onDayClick, isTeam, locale, isLoading }) {
+function WeekGrid({ start, events, tasks, workspaces, onDayClick, isTeam, locale, isLoading }) {
   const TODAY = new Date(); TODAY.setHours(0,0,0,0);
   return (
     <div className="week-grid">
@@ -32,6 +48,30 @@ function WeekGrid({ start, events, onDayClick, isTeam, locale, isLoading }) {
         const isT = sameD(d, TODAY);
         const isP = d < TODAY;
         const dayEvs = sortEventsBySchedule(events.filter(e => e.date === ds));
+        const dayTasks = tasks
+          .filter((task) => toDateString(task.dueDate) === ds)
+          .map((task) => ({
+            id: task._id,
+            kind: 'task',
+            title: task.title || 'Task',
+            meta: task.assignee || task.client || '',
+          }));
+        const dayWorkspaces = workspaces
+          .filter((workspace) => {
+            const workspaceDate = toDateString(workspace.deadline) || toDateString(workspace.shootDate);
+            return workspaceDate === ds;
+          })
+          .map((workspace) => ({
+            id: workspace._id,
+            kind: 'workspace',
+            title: workspace.name || 'Workspace',
+            meta: workspace.client || workspace.editor || '',
+          }));
+        const dayItems = [
+          ...dayEvs.map((event) => ({ id: event._id, kind: 'event', event })),
+          ...dayTasks,
+          ...dayWorkspaces,
+        ];
         return (
           <div
             key={ds}
@@ -59,46 +99,60 @@ function WeekGrid({ start, events, onDayClick, isTeam, locale, isLoading }) {
                     <span className="event-chip-time home-skeleton-line home-skeleton-shimmer" />
                   </div>
                 ))
-              ) : dayEvs.slice(0,3).map(e => {
-                const initials = getAssigneeInitials(e, { maxLength: 2 });
-                const monoStyle = getAssigneeMonogramStyle(e);
-                const assigneeName = e.assigneeId && typeof e.assigneeId === 'object' ? e.assigneeId.name : '';
-                const timeDisp = formatEventTime(e.time, locale, { hour12: true });
+              ) : dayItems.slice(0,3).map((item) => {
+                if (item.kind === 'event') {
+                  const e = item.event;
+                  const initials = getAssigneeInitials(e, { maxLength: 2 });
+                  const monoStyle = getAssigneeMonogramStyle(e);
+                  const assigneeName = e.assigneeId && typeof e.assigneeId === 'object' ? e.assigneeId.name : '';
+                  const timeDisp = formatEventTime(e.time, locale, { hour12: true });
+                  return (
+                    <div
+                      key={e._id}
+                      role={isTeam && !isP ? 'button' : undefined}
+                      tabIndex={isTeam && !isP ? 0 : undefined}
+                      className={`chip event-chip-row ${TYPE_CLS[e.type]||'chip-shoot'}`}
+                      title={e.name}
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        if (!isP && isTeam) onDayClick(ds);
+                      }}
+                      onKeyDown={(ev) => {
+                        if (isP || !isTeam) return;
+                        if (ev.key === 'Enter' || ev.key === ' ') {
+                          ev.preventDefault();
+                          ev.stopPropagation();
+                          onDayClick(ds);
+                        }
+                      }}
+                    >
+                      <span className="event-chip-name">{e.name}</span>
+                      {initials ? (
+                        <span className="event-chip-ini" style={monoStyle} title={assigneeName || undefined}>
+                          {initials}
+                        </span>
+                      ) : null}
+                      {timeDisp ? <span className="event-chip-time">{timeDisp}</span> : null}
+                    </div>
+                  );
+                }
+                const isTask = item.kind === 'task';
                 return (
                   <div
-                    key={e._id}
-                    role={isTeam && !isP ? 'button' : undefined}
-                    tabIndex={isTeam && !isP ? 0 : undefined}
-                    className={`chip event-chip-row ${TYPE_CLS[e.type]||'chip-shoot'}`}
-                    title={e.name}
-                    onClick={(ev) => {
-                      ev.stopPropagation();
-                      if (!isP && isTeam) onDayClick(ds);
-                    }}
-                    onKeyDown={(ev) => {
-                      if (isP || !isTeam) return;
-                      if (ev.key === 'Enter' || ev.key === ' ') {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                        onDayClick(ds);
-                      }
-                    }}
+                    key={`${item.kind}-${item.id}`}
+                    className="chip event-chip-row"
+                    style={{ background: 'var(--bg-alt)', color: 'var(--text-2)' }}
+                    title={item.title}
                   >
-                    <span className="event-chip-name">{e.name}</span>
-                    {initials ? (
-                      <span
-                        className="event-chip-ini"
-                        style={monoStyle}
-                        title={assigneeName || undefined}
-                      >
-                        {initials}
-                      </span>
-                    ) : null}
-                    {timeDisp ? <span className="event-chip-time">{timeDisp}</span> : null}
+                    <span className="event-chip-name">
+                      {isTask ? 'Task: ' : 'Workspace: '}
+                      {item.title}
+                    </span>
+                    {item.meta ? <span className="event-chip-time">{item.meta}</span> : null}
                   </div>
                 );
               })}
-              {!isLoading && dayEvs.length > 3 && <div className="chip" style={{background:'var(--bg-alt)',color:'var(--text-3)'}}>+{dayEvs.length-3}</div>}
+              {!isLoading && dayItems.length > 3 && <div className="chip" style={{background:'var(--bg-alt)',color:'var(--text-3)'}}>+{dayItems.length-3}</div>}
             </div>
           </div>
         );
@@ -135,6 +189,11 @@ export default function HomeView() {
     queryFn: getTasks,
     enabled: isTeam,
   });
+  const { data: workspaces = [], isLoading: workspacesLoading } = useQuery({
+    queryKey: ['workspaces'],
+    queryFn: getWorkspaces,
+    enabled: isTeam,
+  });
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ['events'],
     queryFn: getEvents,
@@ -161,11 +220,43 @@ export default function HomeView() {
       setForm(emptyEventForm());
     },
   });
+  const deleteEventMut = useMutation({
+    mutationFn: (id) => deleteEvent(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['events'] });
+      qc.invalidateQueries({ queryKey: ['activity'] });
+      setDayModalDate(null);
+    },
+  });
 
   const dayModalEvents = useMemo(() => {
     if (!dayModalDate) return [];
     return sortEventsBySchedule(events.filter((e) => e.date === dayModalDate));
   }, [events, dayModalDate]);
+  const dayModalItems = useMemo(() => {
+    if (!dayModalDate) return [];
+    const dayEventItems = dayModalEvents.map((event) => ({ id: event._id, kind: 'event', event }));
+    const dayTaskItems = tasks
+      .filter((task) => toDateString(task.dueDate) === dayModalDate)
+      .map((task) => ({
+        id: task._id,
+        kind: 'task',
+        title: task.title || 'Task',
+        meta: task.assignee || task.client || '',
+      }));
+    const dayWorkspaceItems = workspaces
+      .filter((workspace) => {
+        const workspaceDate = toDateString(workspace.deadline) || toDateString(workspace.shootDate);
+        return workspaceDate === dayModalDate;
+      })
+      .map((workspace) => ({
+        id: workspace._id,
+        kind: 'workspace',
+        title: workspace.name || 'Workspace',
+        meta: workspace.client || workspace.editor || '',
+      }));
+    return [...dayEventItems, ...dayTaskItems, ...dayWorkspaceItems];
+  }, [dayModalDate, dayModalEvents, tasks, workspaces]);
 
   const openDayFlow = (ds) => {
     if (!isTeam) return;
@@ -195,6 +286,26 @@ export default function HomeView() {
     setEventModalOpen(false);
     setEditingEventId(null);
     setForm(emptyEventForm());
+  };
+
+  const handleDeleteEvent = (event) => {
+    if (!event?._id || deleteEventMut.isPending) return;
+    deleteEventMut.mutate(event._id);
+  };
+  const handleDayItemClick = (item) => {
+    if (item.kind === 'task') {
+      setDayModalDate(null);
+      navigate(`${DASHBOARD_BASE}/taken`);
+      return;
+    }
+    if (item.kind === 'workspace') {
+      setDayModalDate(null);
+      navigate(`${DASHBOARD_BASE}/workspace/${item.id}`);
+    }
+  };
+  const handleEventItemNavigate = () => {
+    setDayModalDate(null);
+    navigate(`${DASHBOARD_BASE}/agenda`);
   };
 
   const mon  = getMon(TODAY);
@@ -243,10 +354,12 @@ export default function HomeView() {
               <WeekGrid
                 start={mon}
                 events={events}
+                tasks={tasks}
+                workspaces={workspaces}
                 onDayClick={openDayFlow}
                 isTeam={isTeam}
                 locale={locale}
-                isLoading={eventsLoading}
+                isLoading={eventsLoading || tasksLoading || workspacesLoading}
               />
             </div>
           </div>
@@ -256,10 +369,12 @@ export default function HomeView() {
               <WeekGrid
                 start={nmon}
                 events={events}
+                tasks={tasks}
+                workspaces={workspaces}
                 onDayClick={openDayFlow}
                 isTeam={isTeam}
                 locale={locale}
-                isLoading={eventsLoading}
+                isLoading={eventsLoading || tasksLoading || workspacesLoading}
               />
             </div>
           </div>
@@ -299,9 +414,12 @@ export default function HomeView() {
       <EventDayModal
         date={dayModalDate}
         events={dayModalEvents}
+        items={dayModalItems}
         onClose={() => setDayModalDate(null)}
         onAddEvent={openCreateEventForDate}
-        onEventClick={openEditEvent}
+        onEventClick={handleEventItemNavigate}
+        onDeleteEvent={handleDeleteEvent}
+        onItemClick={handleDayItemClick}
       />
 
       <EventFormModal
