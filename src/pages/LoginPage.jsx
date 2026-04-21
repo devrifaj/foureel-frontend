@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLang } from "../context/LangContext";
 import FormInput from "../components/FormInput";
+import LoadingSpinner from "../components/LoadingSpinner";
 import {
   login as apiLogin,
   requestClientForgotPassword,
@@ -356,8 +357,20 @@ export default function LoginPage() {
               errorMessage={resetFieldErrors.confirm}
             />
             <FeedbackBanner feedback={feedback} />
-            <button type="submit" className="login-btn" disabled={submitting}>
-              {submitting ? t("resetSubmitLoading") : t("resetSubmit")}
+            <button
+              type="submit"
+              className="login-btn"
+              disabled={submitting}
+              style={submitting ? { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px" } : undefined}
+            >
+              {submitting ? (
+                <>
+                  <LoadingSpinner size={18} />
+                  <span>{t("resetSubmitLoading")}</span>
+                </>
+              ) : (
+                t("resetSubmit")
+              )}
             </button>
             <button
               type="button"
@@ -387,8 +400,20 @@ export default function LoginPage() {
               errorMessage={forgotFieldError}
             />
             <FeedbackBanner feedback={feedback} />
-            <button type="submit" className="login-btn" disabled={submitting}>
-              {submitting ? t("forgotSubmitLoading") : t("forgotSubmit")}
+            <button
+              type="submit"
+              className="login-btn"
+              disabled={submitting}
+              style={submitting ? { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px" } : undefined}
+            >
+              {submitting ? (
+                <>
+                  <LoadingSpinner size={18} />
+                  <span>{t("forgotSubmitLoading")}</span>
+                </>
+              ) : (
+                t("forgotSubmit")
+              )}
             </button>
             <button
               type="button"
@@ -437,8 +462,20 @@ export default function LoginPage() {
               </button>
             ) : null}
             <FeedbackBanner feedback={feedback} />
-            <button type="submit" className="login-btn" disabled={submitting}>
-              {submitting ? t("portalLoginSubmitLoading") : t("portalLoginSubmit")}
+            <button
+              type="submit"
+              className="login-btn"
+              disabled={submitting}
+              style={submitting ? { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px" } : undefined}
+            >
+              {submitting ? (
+                <>
+                  <LoadingSpinner size={18} />
+                  <span>{t("portalLoginSubmitLoading")}</span>
+                </>
+              ) : (
+                t("portalLoginSubmit")
+              )}
             </button>
           </form>
         ) : null}

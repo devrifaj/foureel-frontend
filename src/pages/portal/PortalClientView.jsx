@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useLang } from '../../context/LangContext';
 import { getPortalMe, sendClientNote, approveVideo, requestRevision, saveQuestionnaire } from '../../api';
+import LoadingSpinner from '../../components/LoadingSpinner';
 
 const MONTHS_NL = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
 function fmtDate(ds) {
@@ -168,9 +169,13 @@ function Questionnaire({ clientName, onSubmit }) {
       {/* Footer */}
       <div className="portal-questionnaire-footer" style={{position:'fixed',bottom:0,left:0,right:0,background:'white',borderTop:'2px solid var(--border)',padding:'16px 32px',display:'flex',alignItems:'center',justifyContent:'space-between',zIndex:100,boxShadow:'0 -4px 20px rgba(28,20,16,.08)'}}>
         <div style={{fontSize:'12px',color:'var(--sage)',fontWeight:'600'}}>✓ Automatisch opgeslagen</div>
-        <button className="portal-questionnaire-submit-btn" onClick={async()=>{await saveMut.mutateAsync({a:answers,s:true});setSubmitted(true);}}
-          style={{background:'var(--accent)',color:'white',border:'none',borderRadius:'10px',padding:'14px 32px',fontFamily:'Montserrat',fontSize:'15px',fontWeight:'700',cursor:'pointer'}}>
-          Vragenlijst versturen →
+        <button
+          className="portal-questionnaire-submit-btn"
+          onClick={async()=>{await saveMut.mutateAsync({a:answers,s:true});setSubmitted(true);}}
+          disabled={saveMut.isPending}
+          style={{background:'var(--accent)',color:'white',border:'none',borderRadius:'10px',padding:'14px 32px',fontFamily:'Montserrat',fontSize:'15px',fontWeight:'700',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:'8px'}}>
+          {saveMut.isPending ? <LoadingSpinner size={18} /> : null}
+          <span>Vragenlijst versturen →</span>
         </button>
       </div>
     </div>
@@ -309,8 +314,14 @@ export default function PortalClientView() {
                             <textarea value={revisionNote} onChange={e=>setRevisionNote(e.target.value)} placeholder="Beschrijf de gewenste aanpassing..." rows={3}
                               style={{width:'100%',padding:'10px 12px',border:'1.5px solid var(--amber)',borderRadius:'8px',fontFamily:'DM Sans,sans-serif',fontSize:'13px',resize:'none',outline:'none',boxSizing:'border-box'}} />
                             <div style={{display:'flex',gap:'8px',marginTop:'8px'}}>
-                              <button onClick={()=>revisionMut.mutate({id:v._id,n:revisionNote})} disabled={!revisionNote.trim()}
-                                style={{background:'var(--amber)',color:'white',border:'none',borderRadius:'7px',padding:'8px 14px',fontSize:'12px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit'}}>Verstuur revisie</button>
+                              <button
+                                onClick={()=>revisionMut.mutate({id:v._id,n:revisionNote})}
+                                disabled={!revisionNote.trim() || revisionMut.isPending}
+                                style={{background:'var(--amber)',color:'white',border:'none',borderRadius:'7px',padding:'8px 14px',fontSize:'12px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:'8px'}}
+                              >
+                                {revisionMut.isPending ? <LoadingSpinner size={16} /> : null}
+                                <span>Verstuur revisie</span>
+                              </button>
                               <button onClick={()=>{setRevisionModal(null);setRevisionNote('');}}
                                 style={{background:'none',border:'1px solid var(--border)',borderRadius:'7px',padding:'8px 14px',fontSize:'12px',cursor:'pointer',fontFamily:'inherit'}}>Annuleren</button>
                             </div>
@@ -406,7 +417,21 @@ export default function PortalClientView() {
             <div className="note-input-row">
               <textarea className="note-input" value={note} onChange={e=>setNote(e.target.value)} placeholder="Stel een vraag of laat een notitie achter…" rows={2}
                 onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(note.trim())noteMut.mutate(note);}}} />
-              <button className="note-send" onClick={()=>{if(note.trim())noteMut.mutate(note);}}>Stuur</button>
+              <button
+                className="note-send"
+                onClick={()=>{if(note.trim())noteMut.mutate(note);}}
+                disabled={!note.trim() || noteMut.isPending}
+                style={noteMut.isPending ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : undefined}
+              >
+                {noteMut.isPending ? (
+                  <>
+                    <LoadingSpinner size={16} />
+                    <span>Stuur</span>
+                  </>
+                ) : (
+                  'Stuur'
+                )}
+              </button>
             </div>
           </div>
         </div>

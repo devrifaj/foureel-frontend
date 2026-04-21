@@ -186,7 +186,7 @@ function PulseViewSkeleton({ t }) {
 
       <div className="pulse-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div className="pulse-card">
-          {pulseSkeleton('36%', 12, { marginBottom: 14 })}
+          <div className="pulse-card-title">{t('pulseCardPipeline')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {Array.from({ length: 4 }).map((_, idx) => (
               <div key={`pulse-pipeline-skeleton-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -198,7 +198,7 @@ function PulseViewSkeleton({ t }) {
         </div>
 
         <div className="pulse-card">
-          {pulseSkeleton('44%', 12, { marginBottom: 10 })}
+          <div className="pulse-card-title">{t('pulseTeamCapacity')}</div>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8, marginBottom: 18 }}>
             {pulseSkeleton(120, 70, { borderRadius: 14 })}
           </div>
@@ -217,7 +217,7 @@ function PulseViewSkeleton({ t }) {
 
       <div className="pulse-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div className="pulse-card">
-          {pulseSkeleton('34%', 12, { marginBottom: 12 })}
+          <div className="pulse-card-title">{t('pulseCardReminders')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {Array.from({ length: 4 }).map((_, idx) => (
               <div key={`pulse-alert-skeleton-${idx}`} style={{ borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border)' }}>
@@ -230,7 +230,7 @@ function PulseViewSkeleton({ t }) {
         </div>
 
         <div className="pulse-card">
-          {pulseSkeleton('30%', 12, { marginBottom: 16 })}
+          <div className="pulse-card-title">{t('pulseCardGrowth')}</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120, marginTop: 16, padding: '0 4px' }}>
             {Array.from({ length: 6 }).map((_, idx) => (
               <div key={`pulse-growth-skeleton-${idx}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%' }}>
@@ -248,7 +248,7 @@ function PulseViewSkeleton({ t }) {
       </div>
 
       <div className="pulse-card pulse-client-health" style={{ marginBottom: 16 }}>
-        {pulseSkeleton('38%', 12, { marginBottom: 12 })}
+        <div className="pulse-card-title">{t('pulseCardClientHealth')}</div>
         <div className="pulse-client-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10, marginTop: 12 }}>
           {Array.from({ length: 6 }).map((_, idx) => (
             <div key={`pulse-client-skeleton-${idx}`} style={{ background: 'var(--bg-alt)', borderRadius: 9, padding: '12px 14px', border: '1.5px solid var(--border)' }}>

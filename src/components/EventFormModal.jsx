@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLang } from '../context/LangContext';
 import { splitDateTimeLocal } from '../utils/eventFormState';
+import LoadingSpinner from './LoadingSpinner';
 
 const TYPES = ['Shoot', 'Edit', 'Deadline', 'Call', 'Delivery'];
 
@@ -215,8 +216,21 @@ export default function EventFormModal({
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             {t('cancel')}
           </button>
-          <button type="button" className="btn btn-primary" onClick={handleSave} disabled={!isTeam || saveMut.isPending}>
-            {saveMut.isPending ? '…' : t('save')}
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleSave}
+            disabled={!isTeam || saveMut.isPending}
+            style={saveMut.isPending ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : undefined}
+          >
+            {saveMut.isPending ? (
+              <>
+                <LoadingSpinner size={18} />
+                <span>{t('save')}</span>
+              </>
+            ) : (
+              t('save')
+            )}
           </button>
         </div>
       </div>

@@ -15,6 +15,7 @@ import {
   deleteWorkspaceVideo,
   getClients,
 } from "../../api";
+import LoadingSpinner from "../../components/LoadingSpinner";
 
 const FASE_MAP = {
   tentative: { labelKey: "wsFase_tentative", cls: "ws-ef-tentative", group: "intern" },
@@ -183,7 +184,7 @@ export default function WorkspaceView() {
   const shotOverlayRef = useRef(null);
   const qc = useQueryClient();
 
-  const { data: batches = [] } = useQuery({
+  const { data: batches = [], isLoading: isWorkspacesLoading } = useQuery({
     queryKey: ["workspaces"],
     queryFn: getWorkspaces,
   });
@@ -745,8 +746,16 @@ export default function WorkspaceView() {
             className="btn btn-primary ws-create-modal-btn"
             disabled={createBatchMut.isPending}
             onClick={createNewBatch}
+            style={createBatchMut.isPending ? { display: "inline-flex", alignItems: "center", gap: "8px" } : undefined}
           >
-            {t("wsCreateProject")}
+            {createBatchMut.isPending ? (
+              <>
+                <LoadingSpinner size={18} />
+                <span>{t("wsCreateProject")}</span>
+              </>
+            ) : (
+              t("wsCreateProject")
+            )}
           </button>
         </div>
       </div>
@@ -792,8 +801,16 @@ export default function WorkspaceView() {
             className="btn btn-primary"
             disabled={!newBatchSubName.trim() || addSubBatchMut.isPending}
             onClick={createNewSubBatch}
+            style={addSubBatchMut.isPending ? { display: "inline-flex", alignItems: "center", gap: "8px" } : undefined}
           >
-            {t("wsCreateBatch")}
+            {addSubBatchMut.isPending ? (
+              <>
+                <LoadingSpinner size={18} />
+                <span>{t("wsCreateBatch")}</span>
+              </>
+            ) : (
+              t("wsCreateBatch")
+            )}
           </button>
         </div>
       </div>
@@ -2289,7 +2306,63 @@ export default function WorkspaceView() {
                 </tr>
               </thead>
               <tbody>
-                {filteredBatches.map((b) => {
+                {isWorkspacesLoading
+                  ? Array.from({ length: 6 }).map((_, idx) => (
+                      <tr key={`ws-skeleton-${idx}`} className="ws-tr ws-tr-skeleton">
+                        <td className="ws-td">
+                          <div className="ws-td-inner">
+                            <span className="ws-row-skel ws-row-skel-date" />
+                          </div>
+                        </td>
+                        <td className="ws-td">
+                          <div className="ws-td-inner">
+                            <span className="ws-row-skel ws-row-skel-pill" />
+                          </div>
+                        </td>
+                        <td className="ws-td">
+                          <div className="ws-project-link">
+                            <span className="ws-row-skel ws-row-skel-project" />
+                          </div>
+                        </td>
+                        <td className="ws-td">
+                          <div className="ws-td-inner">
+                            <span className="ws-row-skel ws-row-skel-count" />
+                          </div>
+                        </td>
+                        <td className="ws-td">
+                          <div className="ws-td-inner ws-row-skel-progress-wrap">
+                            <span className="ws-row-skel ws-row-skel-progress" />
+                            <span className="ws-row-skel ws-row-skel-meta" />
+                          </div>
+                        </td>
+                        <td className="ws-td">
+                          <div className="ws-td-inner">
+                            <span className="ws-row-skel ws-row-skel-date" />
+                          </div>
+                        </td>
+                        <td className="ws-td">
+                          <div className="ws-td-inner">
+                            <span className="ws-row-skel ws-row-skel-pill" />
+                          </div>
+                        </td>
+                        <td className="ws-td">
+                          <div className="ws-td-inner">
+                            <span className="ws-row-skel ws-row-skel-editor" />
+                          </div>
+                        </td>
+                        <td className="ws-td">
+                          <div className="ws-td-inner">
+                            <span className="ws-row-skel ws-row-skel-client" />
+                          </div>
+                        </td>
+                        <td className="ws-td">
+                          <div className="ws-td-inner">
+                            <span className="ws-row-skel ws-row-skel-action" />
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  : filteredBatches.map((b) => {
                   const videos = (b.batches || []).flatMap(
                     (sb) => sb.videos || [],
                   );

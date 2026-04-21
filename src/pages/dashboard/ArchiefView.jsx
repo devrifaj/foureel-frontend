@@ -71,11 +71,12 @@ const ArchiefView = () => {
   const [toast, setToast] = useState(null);
   const qc = useQueryClient();
 
-  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: getClients });
-  const { data: allArchivedTasks = [] } = useQuery({
+  const { data: clients = [], isPending: clientsPending } = useQuery({ queryKey: ['clients'], queryFn: getClients });
+  const { data: allArchivedTasks = [], isPending: archivedPending } = useQuery({
     queryKey: ['archivedTasks'],
     queryFn: () => getArchivedTasks(),
   });
+  const showArchiveSkeleton = clientsPending || archivedPending;
 
   const folderTasks = useMemo(() => {
     if (folder == null) return allArchivedTasks;
@@ -167,70 +168,80 @@ const ArchiefView = () => {
       </div>
 
       <div className="archive-layout">
-        <div className="folder-list">
-          {[{ name: t('archiveAllTasks'), id: null }, ...clients.map((c) => ({ name: c.name, id: c._id }))].map((f) => (
-            <div key={f.name} onClick={() => setFolder(f.id)} className={`folder-item${folder === f.id ? ' active' : ''}`}>
-              <span className="folder-icon">{f.id ? '📂' : '📁'}</span> {f.name}
-              <span className="folder-count">
-                {f.id != null
-                  ? allArchivedTasks.filter((task) => taskMatchesClient(task, f)).length
-                  : allArchivedTasks.length}
-              </span>
+            <div className="folder-list">
+              {showArchiveSkeleton ? (
+                Array.from({ length: 7 }).map((_, idx) => (
+                  <div key={`folder-skeleton-${idx}`} className="folder-item archive-folder-skeleton">
+                    <span className="archive-skeleton archive-skeleton-folder-icon" />
+                    <span className="archive-skeleton archive-skeleton-folder-name" />
+                    <span className="archive-skeleton archive-skeleton-folder-count" />
+                  </div>
+                ))
+              ) : (
+                [{ name: t('archiveAllTasks'), id: null }, ...clients.map((c) => ({ name: c.name, id: c._id }))].map((f) => (
+                  <div key={f.name} onClick={() => setFolder(f.id)} className={`folder-item${folder === f.id ? ' active' : ''}`}>
+                    <span className="folder-icon">{f.id ? '📂' : '📁'}</span> {f.name}
+                    <span className="folder-count">
+                      {f.id != null
+                        ? allArchivedTasks.filter((task) => taskMatchesClient(task, f)).length
+                        : allArchivedTasks.length}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
-          ))}
-        </div>
 
-        <div className="archive-main">
-          <div className="archive-controls-wrap">
-            <div className="archive-controls">
-              <input
-                className="search-input"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t('archiveSearchPlaceholder')}
-                style={{ maxWidth: '200px', flex: 1, minWidth: '140px' }}
-              />
-              <div className="archive-control-group">
-                <span className="archive-control-label">{t('archiveMonth')}</span>
-                <select className="form-select archive-select" value={month} onChange={(e) => setMonth(e.target.value)}>
-                  <option value="all">{t('archiveAllMonths')}</option>
-                  {monthOptions.map((m) => (
-                    <option key={m} value={m}>{formatMonthLabel(m, lang)}</option>
-                  ))}
-                </select>
+            <div className="archive-main">
+              <div className="archive-controls-wrap">
+                <div className="archive-controls">
+                  <input
+                    className="search-input"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={t('archiveSearchPlaceholder')}
+                    style={{ maxWidth: '200px', flex: 1, minWidth: '140px' }}
+                  />
+                  <div className="archive-control-group">
+                    <span className="archive-control-label">{t('archiveMonth')}</span>
+                    <select className="form-select archive-select" value={month} onChange={(e) => setMonth(e.target.value)}>
+                      <option value="all">{t('archiveAllMonths')}</option>
+                      {monthOptions.map((m) => (
+                        <option key={m} value={m}>{formatMonthLabel(m, lang)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="archive-control-group">
+                    <span className="archive-control-label">{t('archivePerson')}</span>
+                    <select className="form-select archive-select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+                      <option value="all">{t('archiveEveryone')}</option>
+                      {assigneeOptions.map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="archive-control-group">
+                    <span className="archive-control-label">{t('archiveFilterReason')}</span>
+                    <select className="form-select archive-select" value={reason} onChange={(e) => setReason(e.target.value)}>
+                      <option value="all">{t('archiveAll')}</option>
+                      <option value="completed">{t('archiveReasonCompleted')}</option>
+                      <option value="delivered">{t('archiveReasonDelivered')}</option>
+                      <option value="manual">{t('archiveReasonManual')}</option>
+                    </select>
+                  </div>
+                  <div className="archive-control-group archive-sort-group">
+                    <span className="archive-control-label">{t('archiveSort')}</span>
+                    <select className="form-select archive-select" value={sort} onChange={(e) => setSort(e.target.value)}>
+                      <option value="newest">{t('archiveSortNewest')}</option>
+                      <option value="oldest">{t('archiveSortOldest')}</option>
+                      <option value="az">{t('archiveSortAZ')}</option>
+                      <option value="za">{t('archiveSortZA')}</option>
+                    </select>
+                  </div>
+                  <button type="button" className="btn btn-ghost btn-sm archive-reset-btn" onClick={() => { setFolder(null); resetFilters(); }}>{t('archiveReset')}</button>
+                </div>
               </div>
-              <div className="archive-control-group">
-                <span className="archive-control-label">{t('archivePerson')}</span>
-                <select className="form-select archive-select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-                  <option value="all">{t('archiveEveryone')}</option>
-                  {assigneeOptions.map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="archive-control-group">
-                <span className="archive-control-label">{t('archiveFilterReason')}</span>
-                <select className="form-select archive-select" value={reason} onChange={(e) => setReason(e.target.value)}>
-                  <option value="all">{t('archiveAll')}</option>
-                  <option value="completed">{t('archiveReasonCompleted')}</option>
-                  <option value="delivered">{t('archiveReasonDelivered')}</option>
-                  <option value="manual">{t('archiveReasonManual')}</option>
-                </select>
-              </div>
-              <div className="archive-control-group archive-sort-group">
-                <span className="archive-control-label">{t('archiveSort')}</span>
-                <select className="form-select archive-select" value={sort} onChange={(e) => setSort(e.target.value)}>
-                  <option value="newest">{t('archiveSortNewest')}</option>
-                  <option value="oldest">{t('archiveSortOldest')}</option>
-                  <option value="az">{t('archiveSortAZ')}</option>
-                  <option value="za">{t('archiveSortZA')}</option>
-                </select>
-              </div>
-              <button type="button" className="btn btn-ghost btn-sm archive-reset-btn" onClick={() => { setFolder(null); resetFilters(); }}>{t('archiveReset')}</button>
-            </div>
-          </div>
 
-          <div className="archive-content">
+              <div className="archive-content">
           <div className="archive-header">
             <div className="archive-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h3>{folder ? clientNameById[String(folder)] || t('archiveClientFallback') : t('archiveAllTasks')}</h3>
@@ -247,7 +258,25 @@ const ArchiefView = () => {
             </span>
           </div>
 
-          {filtered.length === 0 ? (
+          {showArchiveSkeleton ? (
+            Array.from({ length: 6 }).map((_, idx) => (
+              <div key={`task-skeleton-${idx}`} className="archived-task archive-task-skeleton">
+                <span className="archive-skeleton archive-skeleton-check" />
+                <div className="archive-task-skeleton-main">
+                  <span className="archive-skeleton archive-skeleton-task-title" />
+                  <div className="archive-task-skeleton-meta">
+                    <span className="archive-skeleton archive-skeleton-task-meta" />
+                    <span className="archive-skeleton archive-skeleton-task-meta" />
+                    <span className="archive-skeleton archive-skeleton-task-meta" />
+                  </div>
+                </div>
+                <div className="archive-task-skeleton-right">
+                  <span className="archive-skeleton archive-skeleton-reason" />
+                  <span className="archive-skeleton archive-skeleton-arrow" />
+                </div>
+              </div>
+            ))
+          ) : filtered.length === 0 ? (
             <div style={{ padding: '42px', textAlign: 'center', color: 'var(--text-3)' }}>
               <div style={{ fontSize: '32px', marginBottom: '10px' }}>🗂</div>
               <div style={{ fontStyle: 'italic', marginBottom: '12px' }}>{t('archiveEmpty')}</div>
@@ -280,8 +309,9 @@ const ArchiefView = () => {
               );
             })
           )}
-          </div>
-        </div>
+              </div>
+            </div>
+          
       </div>
 
       {modal && (

@@ -5,10 +5,13 @@ import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { getTasks, getClients, getTeamMembers, createTask, updateTask, archiveTask } from '../../api';
 import { useLang } from '../../context/LangContext';
+import LoadingSpinner from '../../components/LoadingSpinner';
 
 const COLS = [{ id: 'todo' }, { id: 'bezig' }, { id: 'review' }, { id: 'klaar' }];
 const DEFAULT_TAKEN_FILTER_SKELETON_COUNT = 5;
 const TAKEN_FILTER_SKEL_NAME_W = ['52px', '44px', '48px', '56px', '40px', '50px', '46px', '54px'];
+const TAKEN_CARD_SKEL_TITLE_W = ['92%', '78%', '84%', '68%', '88%', '72%'];
+const TAKEN_COL_SKEL_COUNTS = { todo: 3, bezig: 2, review: 2, klaar: 3 };
 const TASK_TITLE_MAX_LEN = 200;
 const VALID_TASK_PRIORITIES = new Set(['High', 'Normal', 'Low']);
 
@@ -65,12 +68,75 @@ function TakenFilterSkeletons({ count }) {
   return Array.from({ length: count }, (_, i) => (
     <div key={`taken-filter-skel-${i}`} className="filter-btn filter-btn--skeleton" aria-hidden>
       <div className="filter-avatar filter-skeleton-avatar team-skeleton-shimmer" />
-      <span
-        className="team-skeleton-line team-skeleton-shimmer filter-btn-skel-name"
-        style={{ width: TAKEN_FILTER_SKEL_NAME_W[i % TAKEN_FILTER_SKEL_NAME_W.length] }}
-      />
+      <div className="filter-btn-label-col" style={{ minWidth: 0 }}>
+        <span
+          className="team-skeleton-line team-skeleton-shimmer filter-btn-skel-name"
+          style={{
+            width: TAKEN_FILTER_SKEL_NAME_W[i % TAKEN_FILTER_SKEL_NAME_W.length],
+            height: '10px',
+            borderRadius: '999px',
+            alignSelf: 'flex-start',
+          }}
+        />
+      </div>
     </div>
   ));
+}
+
+function TaskCardSkeleton({ index = 0 }) {
+  return (
+    <div className="task-card" aria-hidden style={{ pointerEvents: 'none', cursor: 'default' }}>
+      <div
+        className="team-skeleton-line team-skeleton-shimmer"
+        style={{
+          width: TAKEN_CARD_SKEL_TITLE_W[index % TAKEN_CARD_SKEL_TITLE_W.length],
+          height: '12px',
+          borderRadius: '6px',
+          marginBottom: '8px',
+        }}
+      />
+      <div
+        className="team-skeleton-line team-skeleton-shimmer"
+        style={{ width: '44%', height: '14px', borderRadius: '4px', marginBottom: '12px' }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div
+          className="team-skeleton-avatar team-skeleton-shimmer"
+          style={{ width: '22px', height: '22px' }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div
+            className="team-skeleton-line team-skeleton-shimmer"
+            style={{ width: '10px', height: '10px', borderRadius: '50%' }}
+          />
+          <div
+            className="team-skeleton-line team-skeleton-shimmer"
+            style={{ width: '62px', height: '10px', borderRadius: '5px' }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TakenBoardSkeleton({ t }) {
+  return (
+    <div className="kanban-board" aria-busy>
+      {COLS.map((col) => (
+        <div key={`skel-${col.id}`} className="kanban-col" aria-hidden style={{ pointerEvents: 'none' }}>
+          <div className="col-header">
+            <span className="col-title">{t(col.id)}</span>
+            <span className="col-count team-skeleton-shimmer" style={{ minWidth: '20px', color: 'transparent' }}>
+              00
+            </span>
+          </div>
+          {Array.from({ length: TAKEN_COL_SKEL_COUNTS[col.id] || 2 }).map((_, i) => (
+            <TaskCardSkeleton key={`${col.id}-skel-card-${i}`} index={i} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function prioClass(priority) {
@@ -326,7 +392,7 @@ export default function TakenView() {
     setTaskModal(task);
   };
 
-  const { data: tasks = [] } = useQuery({ queryKey: ['tasks'], queryFn: getTasks });
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({ queryKey: ['tasks'], queryFn: getTasks });
   const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: getClients });
   const {
     data: teamMembers = [],
@@ -553,74 +619,78 @@ export default function TakenView() {
             : null}
         </div>
       </div>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={({ active }) => setActiveId(active.id)}
-        onDragEnd={handleDragEnd}
-        onDragCancel={() => {
-          scheduleClearSuppressTaskCardClick();
-          setActiveId(null);
-        }}
-      >
-        <div className="kanban-board" ref={boardRef}>
-          {COLS.map((col) => {
-            const colTasks = filtered.filter((x) => x.column === col.id);
-            return (
-              <SortableContext key={col.id} items={colTasks.map((x) => x._id)} strategy={verticalListSortingStrategy}>
-                <KanbanColumn columnId={col.id} title={t(col.id)} count={colTasks.length}>
-                  {colTasks.map((task) => (
-                    <TaskCard
-                      key={task._id}
-                      task={task}
-                      onClick={handleTaskCardClick}
-                      assigneeLookup={assigneeLookup}
-                      teamMembers={teamMembers}
-                      isAssigneeEditing={quickEditTaskId === task._id && quickEditField === 'assignee'}
-                      isDueDateEditing={quickEditTaskId === task._id && quickEditField === 'dueDate'}
-                      onStartAssigneeEdit={() => {
-                        setQuickEditTaskId(task._id);
-                        setQuickEditField('assignee');
-                      }}
-                      onStartDueDateEdit={() => {
-                        setQuickEditTaskId(task._id);
-                        setQuickEditField('dueDate');
-                      }}
-                      onAssigneeChange={(assignee) => {
-                        updateMut.mutate({ id: task._id, assignee });
-                      }}
-                      onDueDateChange={(dueDate) => {
-                        updateMut.mutate({ id: task._id, dueDate });
-                      }}
-                      onCancelQuickEdit={() => {
-                        setQuickEditTaskId(null);
-                        setQuickEditField(null);
-                      }}
-                    />
-                  ))}
-                  {col.id === 'todo' && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      style={{ width: '100%', justifyContent: 'center', marginTop: '4px' }}
-                      onClick={openNewTaskModal}
-                    >
-                      {t('addTask')}
-                    </button>
-                  )}
-                </KanbanColumn>
-              </SortableContext>
-            );
-          })}
-        </div>
-        <DragOverlay>
-          {activeTask ? (
-            <div className={`task-card ${prioClass(activeTask.priority)} dragging`}>
-              <TaskCardContent task={activeTask} assigneeLookup={assigneeLookup} />
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+      {tasksLoading ? (
+        <TakenBoardSkeleton t={t} />
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={({ active }) => setActiveId(active.id)}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => {
+            scheduleClearSuppressTaskCardClick();
+            setActiveId(null);
+          }}
+        >
+          <div className="kanban-board" ref={boardRef}>
+            {COLS.map((col) => {
+              const colTasks = filtered.filter((x) => x.column === col.id);
+              return (
+                <SortableContext key={col.id} items={colTasks.map((x) => x._id)} strategy={verticalListSortingStrategy}>
+                  <KanbanColumn columnId={col.id} title={t(col.id)} count={colTasks.length}>
+                    {colTasks.map((task) => (
+                      <TaskCard
+                        key={task._id}
+                        task={task}
+                        onClick={handleTaskCardClick}
+                        assigneeLookup={assigneeLookup}
+                        teamMembers={teamMembers}
+                        isAssigneeEditing={quickEditTaskId === task._id && quickEditField === 'assignee'}
+                        isDueDateEditing={quickEditTaskId === task._id && quickEditField === 'dueDate'}
+                        onStartAssigneeEdit={() => {
+                          setQuickEditTaskId(task._id);
+                          setQuickEditField('assignee');
+                        }}
+                        onStartDueDateEdit={() => {
+                          setQuickEditTaskId(task._id);
+                          setQuickEditField('dueDate');
+                        }}
+                        onAssigneeChange={(assignee) => {
+                          updateMut.mutate({ id: task._id, assignee });
+                        }}
+                        onDueDateChange={(dueDate) => {
+                          updateMut.mutate({ id: task._id, dueDate });
+                        }}
+                        onCancelQuickEdit={() => {
+                          setQuickEditTaskId(null);
+                          setQuickEditField(null);
+                        }}
+                      />
+                    ))}
+                    {col.id === 'todo' && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ width: '100%', justifyContent: 'center', marginTop: '4px' }}
+                        onClick={openNewTaskModal}
+                      >
+                        {t('addTask')}
+                      </button>
+                    )}
+                  </KanbanColumn>
+                </SortableContext>
+              );
+            })}
+          </div>
+          <DragOverlay>
+            {activeTask ? (
+              <div className={`task-card ${prioClass(activeTask.priority)} dragging`}>
+                <TaskCardContent task={activeTask} assigneeLookup={assigneeLookup} />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      )}
       <div
         className="kanban-mobile-fab-indicator"
         aria-label="Kolom navigator"
@@ -806,8 +876,16 @@ export default function TakenView() {
                   });
                 }}
                 disabled={updateMut.isPending}
+                style={updateMut.isPending ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : undefined}
               >
-                {t('save')}
+                {updateMut.isPending ? (
+                  <>
+                    <LoadingSpinner size={18} />
+                    <span>{t('save')}</span>
+                  </>
+                ) : (
+                  t('save')
+                )}
               </button>
             </div>
           </div>
@@ -992,8 +1070,16 @@ export default function TakenView() {
                   });
                 }}
                 disabled={createMut.isPending}
+                style={createMut.isPending ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : undefined}
               >
-                {t('taskCreateSubmit')}
+                {createMut.isPending ? (
+                  <>
+                    <LoadingSpinner size={18} />
+                    <span>{t('taskCreateSubmit')}</span>
+                  </>
+                ) : (
+                  t('taskCreateSubmit')
+                )}
               </button>
             </div>
           </div>

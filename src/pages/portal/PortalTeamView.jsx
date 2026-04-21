@@ -12,6 +12,7 @@ import {
 } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { DASHBOARD_BASE } from "../../paths";
+import LoadingSpinner from "../../components/LoadingSpinner";
 
 function useClientPortalData(clientId) {
   const notesQuery = useQuery({
@@ -500,8 +501,20 @@ export default function PortalTeamView() {
                       resize: "none",
                     }}
                   />
-                  <button className="btn btn-primary" onClick={sendReply}>
-                    Stuur
+                  <button
+                    className="btn btn-primary"
+                    onClick={sendReply}
+                    disabled={!reply.trim() || sendMut.isPending}
+                    style={sendMut.isPending ? { display: "inline-flex", alignItems: "center", gap: "8px" } : undefined}
+                  >
+                    {sendMut.isPending ? (
+                      <>
+                        <LoadingSpinner size={18} />
+                        <span>Stuur</span>
+                      </>
+                    ) : (
+                      "Stuur"
+                    )}
                   </button>
                 </div>
               </>

@@ -22,7 +22,7 @@ function getMon(d) {
 function dStr(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function sameD(a,b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
 
-function WeekGrid({ start, events, onDayClick, isTeam, locale }) {
+function WeekGrid({ start, events, onDayClick, isTeam, locale, isLoading }) {
   const TODAY = new Date(); TODAY.setHours(0,0,0,0);
   return (
     <div className="week-grid">
@@ -52,7 +52,14 @@ function WeekGrid({ start, events, onDayClick, isTeam, locale }) {
               <div className="day-num">{d.getDate()}</div>
             </div>
             <div className="event-chips">
-              {dayEvs.slice(0,3).map(e => {
+              {isLoading ? (
+                Array.from({ length: 2 }).map((_, idx) => (
+                  <div key={`${ds}-skeleton-chip-${idx}`} className="chip event-chip-row event-chip-skeleton" aria-hidden>
+                    <span className="event-chip-name home-skeleton-line home-skeleton-shimmer" />
+                    <span className="event-chip-time home-skeleton-line home-skeleton-shimmer" />
+                  </div>
+                ))
+              ) : dayEvs.slice(0,3).map(e => {
                 const initials = getAssigneeInitials(e, { maxLength: 2 });
                 const monoStyle = getAssigneeMonogramStyle(e);
                 const assigneeName = e.assigneeId && typeof e.assigneeId === 'object' ? e.assigneeId.name : '';
@@ -91,7 +98,7 @@ function WeekGrid({ start, events, onDayClick, isTeam, locale }) {
                   </div>
                 );
               })}
-              {dayEvs.length > 3 && <div className="chip" style={{background:'var(--bg-alt)',color:'var(--text-3)'}}>+{dayEvs.length-3}</div>}
+              {!isLoading && dayEvs.length > 3 && <div className="chip" style={{background:'var(--bg-alt)',color:'var(--text-3)'}}>+{dayEvs.length-3}</div>}
             </div>
           </div>
         );
@@ -113,7 +120,7 @@ export default function HomeView() {
   const [form, setForm] = useState(emptyEventForm);
   const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 
-  const { data: clients = [] } = useQuery({
+  const { data: clients = [], isLoading: clientsLoading } = useQuery({
     queryKey: ['clients'],
     queryFn: getClients,
     enabled: isTeam,
@@ -123,17 +130,17 @@ export default function HomeView() {
     queryFn: getTeamMembers,
     enabled: isTeam,
   });
-  const { data: tasks = [] } = useQuery({
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
     queryKey: ['tasks'],
     queryFn: getTasks,
     enabled: isTeam,
   });
-  const { data: events = [] } = useQuery({
+  const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ['events'],
     queryFn: getEvents,
     enabled: isTeam,
   });
-  const { data: activity = [] } = useQuery({
+  const { data: activity = [], isLoading: activityLoading } = useQuery({
     queryKey: ['activity'],
     queryFn: getActivity,
     enabled: isTeam,
@@ -213,14 +220,16 @@ export default function HomeView() {
 
       <div className="kpi-grid">
         {[
-          { cls:'kpi-0', lbl:t('activeClients'), val:clients.length, desc:t('kpiDescOngoingProjects'), click:()=>navigate(`${DASHBOARD_BASE}/klanten`), id:'kpi-clients' },
-          { cls:'kpi-1', lbl:t('shootsMonth'), val:shoots, desc:t('kpiDescScheduled'), click:()=>navigate(`${DASHBOARD_BASE}/agenda`), id:'kpi-shoots' },
-          { cls:'kpi-2', lbl:t('kpiTasksInProgress'), val:openTasks, desc:t('kpiDescAcrossProjects'), click:()=>navigate(`${DASHBOARD_BASE}/taken`), id:'kpi-tasks' },
-          { cls:'kpi-3', lbl:t('kpiUrgentClients'), val:urgent, desc:t('kpiDescRequiresAttention'), click:()=>navigate(`${DASHBOARD_BASE}/klanten`), id:'kpi-urgent' },
+          { cls:'kpi-0', lbl:t('activeClients'), val:clients.length, desc:t('kpiDescOngoingProjects'), click:()=>navigate(`${DASHBOARD_BASE}/klanten`), id:'kpi-clients', loading: clientsLoading },
+          { cls:'kpi-1', lbl:t('shootsMonth'), val:shoots, desc:t('kpiDescScheduled'), click:()=>navigate(`${DASHBOARD_BASE}/agenda`), id:'kpi-shoots', loading: eventsLoading },
+          { cls:'kpi-2', lbl:t('kpiTasksInProgress'), val:openTasks, desc:t('kpiDescAcrossProjects'), click:()=>navigate(`${DASHBOARD_BASE}/taken`), id:'kpi-tasks', loading: tasksLoading },
+          { cls:'kpi-3', lbl:t('kpiUrgentClients'), val:urgent, desc:t('kpiDescRequiresAttention'), click:()=>navigate(`${DASHBOARD_BASE}/klanten`), id:'kpi-urgent', loading: clientsLoading },
         ].map(k => (
           <div key={k.cls} className={`kpi-card ${k.cls}`} onClick={k.click}>
             <div className="kpi-label">{k.lbl}</div>
-            <div className="kpi-number" id={k.id}>{k.val}</div>
+            <div className="kpi-number" id={k.id}>
+              {k.loading ? <span className="home-skeleton-line home-skeleton-shimmer kpi-number-skeleton" aria-hidden /> : k.val}
+            </div>
             <div className="kpi-desc">{k.desc}</div>
           </div>
         ))}
@@ -237,6 +246,7 @@ export default function HomeView() {
                 onDayClick={openDayFlow}
                 isTeam={isTeam}
                 locale={locale}
+                isLoading={eventsLoading}
               />
             </div>
           </div>
@@ -249,6 +259,7 @@ export default function HomeView() {
                 onDayClick={openDayFlow}
                 isTeam={isTeam}
                 locale={locale}
+                isLoading={eventsLoading}
               />
             </div>
           </div>
@@ -258,7 +269,18 @@ export default function HomeView() {
           <div className="activity-card">
             <div className="section-title" id="activity-section-title">{t('activity')}</div>
             <div id="activity-feed">
-              {activity.slice(0,8).map(a => (
+              {activityLoading ? (
+                Array.from({ length: 5 }).map((_, idx) => (
+                  <div key={`activity-skeleton-${idx}`} className="activity-item" aria-hidden>
+                    <div className="activity-dot home-skeleton-line home-skeleton-shimmer" />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="home-skeleton-line home-skeleton-shimmer activity-text-skeleton" />
+                      <div className="home-skeleton-line home-skeleton-shimmer activity-time-skeleton" />
+                    </div>
+                    <div className="activity-arrow home-skeleton-line home-skeleton-shimmer" />
+                  </div>
+                ))
+              ) : activity.slice(0,8).map(a => (
                 <div key={a._id} className="activity-item">
                   <div className="activity-dot" style={{ background: a.color || 'var(--accent)' }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -268,7 +290,7 @@ export default function HomeView() {
                   <div className="activity-arrow">→</div>
                 </div>
               ))}
-              {activity.length === 0 && <div className="activity-empty">Nog geen activiteit</div>}
+              {!activityLoading && activity.length === 0 && <div className="activity-empty">Nog geen activiteit</div>}
             </div>
           </div>
         </div>

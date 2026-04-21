@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { getTasks, getTeamMembers, createTeamMember } from '../api';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const DEFAULT_MEMBER_FORM = {
   email: '',
@@ -579,8 +580,16 @@ export default function Dashboard() {
                 className="btn btn-primary"
                 disabled={createMemberMut.isPending}
                 onClick={handleSubmitTeamMember}
+                style={createMemberMut.isPending ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : undefined}
               >
-                {createMemberMut.isPending ? t('teamLoading') : t('save')}
+                {createMemberMut.isPending ? (
+                  <>
+                    <LoadingSpinner size={18} />
+                    <span>{t('teamLoading')}</span>
+                  </>
+                ) : (
+                  t('save')
+                )}
               </button>
             </div>
           </div>

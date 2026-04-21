@@ -15,6 +15,7 @@ import {
   getBatches,
 } from '../../api';
 import { useLang } from '../../context/LangContext';
+import LoadingSpinner from '../../components/LoadingSpinner';
 
 const PHASE_OPTIONS = [
   { value: 'Pre-prod', label: 'Pre-productie' },
@@ -62,9 +63,12 @@ function RetainerTab({ client, onSave }) {
   }, [client._id, client.retainer]);
 
   const save = (key, val) => {
-    const updated = { ...r, [key]: val };
-    setR(updated);
-    onSave({ retainer: updated });
+    setR((prev) => {
+      if ((prev?.[key] ?? '') === (val ?? '')) return prev;
+      const updated = { ...(prev || {}), [key]: val };
+      onSave({ retainer: updated });
+      return updated;
+    });
   };
 
   const statuses = ['actief', 'gepauzeerd', 'opgezegd', 'concept'];
@@ -541,8 +545,16 @@ function PortaalTab({ client }) {
             className="btn btn-primary"
             onClick={submitReply}
             disabled={!reply.trim() || sendMut.isPending}
+            style={sendMut.isPending ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : undefined}
           >
-            Stuur
+            {sendMut.isPending ? (
+              <>
+                <LoadingSpinner size={18} />
+                <span>Stuur</span>
+              </>
+            ) : (
+              'Stuur'
+            )}
           </button>
         </div>
       </div>
@@ -901,8 +913,21 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             {lang === 'en' ? 'Cancel' : 'Annuleer'}
           </button>
-          <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {lang === 'en' ? 'Save client' : 'Klant opslaan'}
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleSave}
+            disabled={saving}
+            style={saving ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : undefined}
+          >
+            {saving ? (
+              <>
+                <LoadingSpinner size={18} />
+                <span>{lang === 'en' ? 'Save client' : 'Klant opslaan'}</span>
+              </>
+            ) : (
+              lang === 'en' ? 'Save client' : 'Klant opslaan'
+            )}
           </button>
         </div>
       </div>
@@ -1056,8 +1081,21 @@ function PortalAccessModal({ open, onClose, onSave, saving, lang, currentEmail, 
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             {lang === 'en' ? 'Cancel' : 'Annuleer'}
           </button>
-          <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? (lang === 'en' ? 'Saving…' : 'Opslaan…') : lang === 'en' ? 'Save access' : 'Toegang opslaan'}
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={save}
+            disabled={saving}
+            style={saving ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : undefined}
+          >
+            {saving ? (
+              <>
+                <LoadingSpinner size={18} />
+                <span>{lang === 'en' ? 'Saving…' : 'Opslaan…'}</span>
+              </>
+            ) : (
+              lang === 'en' ? 'Save access' : 'Toegang opslaan'
+            )}
           </button>
         </div>
       </div>
@@ -1469,16 +1507,17 @@ export default function KlantenView() {
         </button>
       </div>
       <div className="client-list-wrap">
-        <div className="client-list">
+        <div className="client-list" aria-busy={isClientsLoading}>
           {isClientsLoading ? (
             Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={`client-skeleton-${i}`}
                 className="client-row"
+                role="status"
                 aria-hidden="true"
                 style={{
                   pointerEvents: 'none',
-                  opacity: 0.9,
+                  opacity: 0.85,
                 }}
               >
                 <div
@@ -1487,9 +1526,9 @@ export default function KlantenView() {
                     width: '24px',
                     height: '12px',
                     borderRadius: '6px',
-                    background: 'linear-gradient(90deg, #eef2f7 25%, #f7f9fc 37%, #eef2f7 63%)',
-                    backgroundSize: '400% 100%',
-                    animation: 'clientSkeletonShimmer 1.4s ease infinite',
+                    background: 'var(--skeleton-gradient)',
+                    backgroundSize: '220% 100%',
+                    animation: 'clientSkeletonShimmer 1.2s linear infinite',
                     color: 'transparent',
                   }}
                 >
@@ -1502,9 +1541,9 @@ export default function KlantenView() {
                     minWidth: '140px',
                     height: '14px',
                     borderRadius: '7px',
-                    background: 'linear-gradient(90deg, #eef2f7 25%, #f7f9fc 37%, #eef2f7 63%)',
-                    backgroundSize: '400% 100%',
-                    animation: 'clientSkeletonShimmer 1.4s ease infinite',
+                    background: 'var(--skeleton-gradient)',
+                    backgroundSize: '220% 100%',
+                    animation: 'clientSkeletonShimmer 1.2s linear infinite',
                     color: 'transparent',
                   }}
                 >
@@ -1528,12 +1567,15 @@ export default function KlantenView() {
       </div>
     </section>
     <style>{`
+      :root {
+        --skeleton-gradient: linear-gradient(90deg, #eef2f7 20%, #f7f9fc 45%, #eef2f7 70%);
+      }
       @keyframes clientSkeletonShimmer {
         0% {
           background-position: 100% 50%;
         }
         100% {
-          background-position: 0 50%;
+          background-position: -100% 50%;
         }
       }
     `}</style>

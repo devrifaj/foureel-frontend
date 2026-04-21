@@ -29,7 +29,7 @@ export default function AgendaView() {
   const [isFs, setIsFs] = useState(false);
   const qc = useQueryClient();
 
-  const { data: events = [] } = useQuery({ queryKey: ['events'], queryFn: getEvents, enabled: isTeam });
+  const { data: events = [], isLoading: eventsLoading } = useQuery({ queryKey: ['events'], queryFn: getEvents, enabled: isTeam });
   const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: getClients, enabled: isTeam });
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['team'],
@@ -199,7 +199,14 @@ export default function AgendaView() {
               >
                 <div className="cal-day-num">{day}</div>
                 <div className="cal-cell-chips">
-                  {dayEvs.slice(0,3).map(e => {
+                  {eventsLoading ? (
+                    Array.from({ length: 2 }).map((_, idx) => (
+                      <div key={`${ds}-agenda-chip-skeleton-${idx}`} className="chip event-chip-row event-chip-skeleton" aria-hidden>
+                        <span className="event-chip-name home-skeleton-line home-skeleton-shimmer" />
+                        <span className="event-chip-time home-skeleton-line home-skeleton-shimmer" />
+                      </div>
+                    ))
+                  ) : dayEvs.slice(0,3).map(e => {
                     const initials = getAssigneeInitials(e, { maxLength: 2 });
                     const monoStyle = getAssigneeMonogramStyle(e);
                     const assigneeName = e.assigneeId && typeof e.assigneeId === 'object' ? e.assigneeId.name : '';
@@ -235,7 +242,7 @@ export default function AgendaView() {
                       </div>
                     );
                   })}
-                  {dayEvs.length>3 && <div className="chip" style={{background:'var(--bg-alt)',color:'var(--text-3)'}}>+{dayEvs.length-3}</div>}
+                  {!eventsLoading && dayEvs.length>3 && <div className="chip" style={{background:'var(--bg-alt)',color:'var(--text-3)'}}>+{dayEvs.length-3}</div>}
                 </div>
               </div>
             );
