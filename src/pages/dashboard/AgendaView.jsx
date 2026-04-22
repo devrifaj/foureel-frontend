@@ -31,6 +31,45 @@ function toDateString(value) {
   if (Number.isNaN(parsed.getTime())) return null;
   return dStr(parsed);
 }
+function getTaskDayItems(tasks, ds) {
+  return tasks
+    .filter((task) => toDateString(task.dueDate) === ds)
+    .map((task) => ({
+      id: task._id,
+      kind: 'task',
+      title: task.title || 'Task',
+      meta: task.assignee || task.client || '',
+      perspectiveLabel: 'Due date',
+    }));
+}
+function getWorkspaceDayItems(workspaces, ds) {
+  const items = [];
+  workspaces.forEach((workspace) => {
+    const deadline = toDateString(workspace.deadline);
+    const shootDate = toDateString(workspace.shootDate);
+    if (shootDate === ds) {
+      items.push({
+        id: `${workspace._id}-shoot`,
+        workspaceId: workspace._id,
+        kind: 'workspace',
+        title: workspace.name || 'Workspace',
+        meta: workspace.client || workspace.editor || '',
+        perspectiveLabel: 'Shoot date',
+      });
+    }
+    if (deadline === ds) {
+      items.push({
+        id: `${workspace._id}-deadline`,
+        workspaceId: workspace._id,
+        kind: 'workspace',
+        title: workspace.name || 'Workspace',
+        meta: workspace.client || workspace.editor || '',
+        perspectiveLabel: 'Deadline',
+      });
+    }
+  });
+  return items;
+}
 
 export default function AgendaView() {
   const navigate = useNavigate();
@@ -121,25 +160,8 @@ export default function AgendaView() {
       kind: 'event',
       event,
     }));
-    const dayTasks = tasks
-      .filter((task) => toDateString(task.dueDate) === ds)
-      .map((task) => ({
-        id: task._id,
-        kind: 'task',
-        title: task.title || 'Task',
-        meta: task.assignee || task.client || '',
-      }));
-    const dayWorkspaces = workspaces
-      .filter((workspace) => {
-        const workspaceDate = toDateString(workspace.deadline) || toDateString(workspace.shootDate);
-        return workspaceDate === ds;
-      })
-      .map((workspace) => ({
-        id: workspace._id,
-        kind: 'workspace',
-        title: workspace.name || 'Workspace',
-        meta: workspace.client || workspace.editor || '',
-      }));
+    const dayTasks = getTaskDayItems(tasks, ds);
+    const dayWorkspaces = getWorkspaceDayItems(workspaces, ds);
     return [...dayEvents, ...dayTasks, ...dayWorkspaces];
   };
 
@@ -180,12 +202,8 @@ export default function AgendaView() {
     }
     if (item.kind === 'workspace') {
       setDayModal(null);
-      navigate(`${DASHBOARD_BASE}/workspace/${item.id}`);
+      navigate(`${DASHBOARD_BASE}/workspace/${item.workspaceId || item.id}`);
     }
-  };
-  const handleEventItemNavigate = () => {
-    setDayModal(null);
-    navigate(`${DASHBOARD_BASE}/agenda`);
   };
 
   return (
@@ -332,7 +350,10 @@ export default function AgendaView() {
                           {item.kind === 'task' ? 'Task: ' : 'Workspace: '}
                           {item.title}
                         </span>
-                        {item.meta ? <span className="event-chip-time">{item.meta}</span> : null}
+                        <span className="event-chip-time">
+                          {item.perspectiveLabel}
+                          {item.meta ? ` · ${item.meta}` : ''}
+                        </span>
                       </div>
                     );
                   })}
@@ -350,7 +371,7 @@ export default function AgendaView() {
         items={dayModal?.items ?? []}
         onClose={() => setDayModal(null)}
         onAddEvent={openCreateFromDay}
-        onEventClick={handleEventItemNavigate}
+        onEventClick={openEditEvent}
         onDeleteEvent={handleDeleteEvent}
         onItemClick={handleDayItemClick}
       />

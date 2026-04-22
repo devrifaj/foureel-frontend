@@ -53,10 +53,13 @@ export default function EventDayModal({ date, events = [], items, onClose, onAdd
                     <div className="event-dot" style={{ background: ITEM_COLOR[item.kind] || 'var(--text-3)' }} />
                     <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
                       <div className="day-event-title-row">
-                        <span className="day-event-name">{item.title}</span>
+                        <span className="day-event-name">
+                          {item.kind === 'task' ? 'Task: ' : 'Workspace: '}
+                          {item.title}
+                        </span>
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>
-                        {item.kind === 'task' ? 'Task' : 'Workspace'}
+                        {item.perspectiveLabel || (item.kind === 'task' ? 'Task' : 'Workspace')}
                         {item.meta ? ` · ${item.meta}` : ''}
                       </div>
                     </div>

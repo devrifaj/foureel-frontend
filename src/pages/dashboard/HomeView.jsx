@@ -37,6 +37,45 @@ function toDateString(value) {
   if (Number.isNaN(parsed.getTime())) return null;
   return dStr(parsed);
 }
+function getTaskDayItems(tasks, ds) {
+  return tasks
+    .filter((task) => toDateString(task.dueDate) === ds)
+    .map((task) => ({
+      id: task._id,
+      kind: 'task',
+      title: task.title || 'Task',
+      meta: task.assignee || task.client || '',
+      perspectiveLabel: 'Due date',
+    }));
+}
+function getWorkspaceDayItems(workspaces, ds) {
+  const items = [];
+  workspaces.forEach((workspace) => {
+    const deadline = toDateString(workspace.deadline);
+    const shootDate = toDateString(workspace.shootDate);
+    if (shootDate === ds) {
+      items.push({
+        id: `${workspace._id}-shoot`,
+        workspaceId: workspace._id,
+        kind: 'workspace',
+        title: workspace.name || 'Workspace',
+        meta: workspace.client || workspace.editor || '',
+        perspectiveLabel: 'Shoot date',
+      });
+    }
+    if (deadline === ds) {
+      items.push({
+        id: `${workspace._id}-deadline`,
+        workspaceId: workspace._id,
+        kind: 'workspace',
+        title: workspace.name || 'Workspace',
+        meta: workspace.client || workspace.editor || '',
+        perspectiveLabel: 'Deadline',
+      });
+    }
+  });
+  return items;
+}
 
 function WeekGrid({ start, events, tasks, workspaces, onDayClick, isTeam, locale, isLoading }) {
   const TODAY = new Date(); TODAY.setHours(0,0,0,0);
@@ -48,25 +87,8 @@ function WeekGrid({ start, events, tasks, workspaces, onDayClick, isTeam, locale
         const isT = sameD(d, TODAY);
         const isP = d < TODAY;
         const dayEvs = sortEventsBySchedule(events.filter(e => e.date === ds));
-        const dayTasks = tasks
-          .filter((task) => toDateString(task.dueDate) === ds)
-          .map((task) => ({
-            id: task._id,
-            kind: 'task',
-            title: task.title || 'Task',
-            meta: task.assignee || task.client || '',
-          }));
-        const dayWorkspaces = workspaces
-          .filter((workspace) => {
-            const workspaceDate = toDateString(workspace.deadline) || toDateString(workspace.shootDate);
-            return workspaceDate === ds;
-          })
-          .map((workspace) => ({
-            id: workspace._id,
-            kind: 'workspace',
-            title: workspace.name || 'Workspace',
-            meta: workspace.client || workspace.editor || '',
-          }));
+        const dayTasks = getTaskDayItems(tasks, ds);
+        const dayWorkspaces = getWorkspaceDayItems(workspaces, ds);
         const dayItems = [
           ...dayEvs.map((event) => ({ id: event._id, kind: 'event', event })),
           ...dayTasks,
@@ -148,7 +170,10 @@ function WeekGrid({ start, events, tasks, workspaces, onDayClick, isTeam, locale
                       {isTask ? 'Task: ' : 'Workspace: '}
                       {item.title}
                     </span>
-                    {item.meta ? <span className="event-chip-time">{item.meta}</span> : null}
+                    <span className="event-chip-time">
+                      {item.perspectiveLabel}
+                      {item.meta ? ` · ${item.meta}` : ''}
+                    </span>
                   </div>
                 );
               })}
@@ -236,25 +261,8 @@ export default function HomeView() {
   const dayModalItems = useMemo(() => {
     if (!dayModalDate) return [];
     const dayEventItems = dayModalEvents.map((event) => ({ id: event._id, kind: 'event', event }));
-    const dayTaskItems = tasks
-      .filter((task) => toDateString(task.dueDate) === dayModalDate)
-      .map((task) => ({
-        id: task._id,
-        kind: 'task',
-        title: task.title || 'Task',
-        meta: task.assignee || task.client || '',
-      }));
-    const dayWorkspaceItems = workspaces
-      .filter((workspace) => {
-        const workspaceDate = toDateString(workspace.deadline) || toDateString(workspace.shootDate);
-        return workspaceDate === dayModalDate;
-      })
-      .map((workspace) => ({
-        id: workspace._id,
-        kind: 'workspace',
-        title: workspace.name || 'Workspace',
-        meta: workspace.client || workspace.editor || '',
-      }));
+    const dayTaskItems = getTaskDayItems(tasks, dayModalDate);
+    const dayWorkspaceItems = getWorkspaceDayItems(workspaces, dayModalDate);
     return [...dayEventItems, ...dayTaskItems, ...dayWorkspaceItems];
   }, [dayModalDate, dayModalEvents, tasks, workspaces]);
 
@@ -300,12 +308,8 @@ export default function HomeView() {
     }
     if (item.kind === 'workspace') {
       setDayModalDate(null);
-      navigate(`${DASHBOARD_BASE}/workspace/${item.id}`);
+      navigate(`${DASHBOARD_BASE}/workspace/${item.workspaceId || item.id}`);
     }
-  };
-  const handleEventItemNavigate = () => {
-    setDayModalDate(null);
-    navigate(`${DASHBOARD_BASE}/agenda`);
   };
 
   const mon  = getMon(TODAY);
@@ -417,7 +421,7 @@ export default function HomeView() {
         items={dayModalItems}
         onClose={() => setDayModalDate(null)}
         onAddEvent={openCreateEventForDate}
-        onEventClick={handleEventItemNavigate}
+        onEventClick={openEditEvent}
         onDeleteEvent={handleDeleteEvent}
         onItemClick={handleDayItemClick}
       />
