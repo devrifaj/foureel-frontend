@@ -231,11 +231,11 @@ export default function AgendaView() {
 
       <div id="fs-legend">
         <span style={{fontSize:'11px',color:'var(--text-3)',fontWeight:'600',letterSpacing:'0.08em',textTransform:'uppercase',marginRight:'4px'}}>Legenda</span>
-        <div className="legend-pill"><div className="legend-dot" style={{background:'var(--sage)'}}/>Shoot</div>
+        <div className="legend-pill"><div className="legend-dot" style={{background:'var(--amber)'}}/>Shoot</div>
         <div className="legend-pill"><div className="legend-dot" style={{background:'var(--amber)'}}/>Edit</div>
-        <div className="legend-pill"><div className="legend-dot" style={{background:'var(--orange)'}}/>Deadline</div>
+        <div className="legend-pill"><div className="legend-dot" style={{background:'#e05050'}}/>Deadline</div>
         <div className="legend-pill"><div className="legend-dot" style={{background:'var(--blue)'}}/>Call</div>
-        <div className="legend-pill"><div className="legend-dot" style={{background:'var(--purple)'}}/>Delivery</div>
+        <div className="legend-pill"><div className="legend-dot" style={{background:'var(--purple)'}}/>Brainstormcall</div>
       </div>
 
       <div className="page-header">
@@ -329,13 +329,15 @@ export default function AgendaView() {
                             }
                           }}
                         >
-                          <span className="event-chip-name">{e.name}</span>
+                          <span className="event-chip-text">
+                            <span className="event-chip-name">{e.name}</span>
+                            {timeDisp ? <span className="event-chip-time">{timeDisp}</span> : null}
+                          </span>
                           {initials ? (
                             <span className="event-chip-ini" style={monoStyle} title={assigneeName || undefined}>
                               {initials}
                             </span>
                           ) : null}
-                          {timeDisp ? <span className="event-chip-time">{timeDisp}</span> : null}
                         </div>
                       );
                     }
@@ -346,13 +348,15 @@ export default function AgendaView() {
                         style={{ background: 'var(--bg-alt)', color: 'var(--text-2)' }}
                         title={item.title}
                       >
-                        <span className="event-chip-name">
-                          {item.kind === 'task' ? 'Task: ' : 'Workspace: '}
-                          {item.title}
-                        </span>
-                        <span className="event-chip-time">
-                          {item.perspectiveLabel}
-                          {item.meta ? ` · ${item.meta}` : ''}
+                        <span className="event-chip-text">
+                          <span className="event-chip-name">
+                            {item.kind === 'task' ? 'Task: ' : 'Workspace: '}
+                            {item.title}
+                          </span>
+                          <span className="event-chip-time">
+                            {item.perspectiveLabel}
+                            {item.meta ? ` · ${item.meta}` : ''}
+                          </span>
                         </span>
                       </div>
                     );

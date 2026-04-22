@@ -14,6 +14,7 @@ import {
   updateWorkspaceVideo,
   deleteWorkspaceVideo,
   getClients,
+  getTeamMembers,
 } from "../../api";
 import LoadingSpinner from "../../components/LoadingSpinner";
 
@@ -79,6 +80,8 @@ const WS_TABS = [
   { key: "deadlines", labelKey: "wsTab_deadlines", icon: "📅" },
   { key: "shoots", labelKey: "wsTab_shoots", icon: "🎬" },
   { key: "month", labelKey: "wsTab_month", icon: "🗓" },
+  { key: "clients", labelKey: "wsTab_clients", icon: "👥" },
+  { key: "editors", labelKey: "wsTab_editors", icon: "🧑‍💻" },
 ];
 const SHOOT_STATUS_MAP = {
   wrapped: { labelKey: "wsShoot_wrapped", cls: "ws-ss-wrapped" },
@@ -161,7 +164,7 @@ export default function WorkspaceView() {
   const [newBatch, setNewBatch] = useState({
     name: "",
     client: "",
-    editor: "Lex",
+    editor: "",
     projectStage: "preproduction",
     shootDate: "",
     deadline: "",
@@ -193,6 +196,10 @@ export default function WorkspaceView() {
   const { data: clients = [] } = useQuery({
     queryKey: ["clients"],
     queryFn: getClients,
+  });
+  const { data: teamMembers = [] } = useQuery({
+    queryKey: ["team"],
+    queryFn: getTeamMembers,
   });
   const updateMut = useMutation({
     mutationFn: ({ wsId, subBId, vId, ...d }) =>
@@ -299,6 +306,37 @@ export default function WorkspaceView() {
           dt.getMonth() === now.getMonth() &&
           dt.getFullYear() === now.getFullYear()
         );
+      });
+    }
+    if (wsTab === "clients") {
+      return list.sort((a, b) => {
+        const clientA = (a.client || "").trim().toLowerCase();
+        const clientB = (b.client || "").trim().toLowerCase();
+        if (clientA && !clientB) return -1;
+        if (!clientA && clientB) return 1;
+        if (clientA !== clientB) return clientA.localeCompare(clientB);
+        const ad = a.shootDate ? new Date(a.shootDate).getTime() : -Infinity;
+        const bd = b.shootDate ? new Date(b.shootDate).getTime() : -Infinity;
+        return bd - ad;
+      });
+    }
+    if (wsTab === "editors") {
+      return list.sort((a, b) => {
+        const editorA = (a.editor || "").trim().toLowerCase();
+        const editorB = (b.editor || "").trim().toLowerCase();
+        if (editorA && !editorB) return -1;
+        if (!editorA && editorB) return 1;
+        if (editorA !== editorB) return editorA.localeCompare(editorB);
+
+        const clientA = (a.client || "").trim().toLowerCase();
+        const clientB = (b.client || "").trim().toLowerCase();
+        if (clientA && !clientB) return -1;
+        if (!clientA && clientB) return 1;
+        if (clientA !== clientB) return clientA.localeCompare(clientB);
+
+        const ad = a.shootDate ? new Date(a.shootDate).getTime() : -Infinity;
+        const bd = b.shootDate ? new Date(b.shootDate).getTime() : -Infinity;
+        return bd - ad;
       });
     }
     return list.sort((a, b) => {
@@ -530,7 +568,7 @@ export default function WorkspaceView() {
           setNewBatch({
             name: "",
             client: "",
-            editor: "Lex",
+            editor: "",
             projectStage: "preproduction",
             shootDate: "",
             deadline: "",
@@ -739,9 +777,11 @@ export default function WorkspaceView() {
             value={newBatch.editor}
             onChange={(e) => updateNewBatchField("editor", e.target.value)}
           >
-            {["Paolo", "Lex", "Rick", "Ray", "Boy"].map((name) => (
-              <option key={name} value={name}>
-                {name} — {name === "Lex" ? t("wsEditorRoleEditor") : t("team")}
+            <option value="">{t("wsTeamPlaceholder")}</option>
+            {teamMembers.map((member) => (
+              <option key={member._id || member.email || member.name} value={member.name}>
+                {member.name}
+                {member.role ? ` — ${member.role}` : ""}
               </option>
             ))}
           </select>
@@ -1354,7 +1394,7 @@ export default function WorkspaceView() {
                 style={{ color: "#c04040", borderColor: "#e8c8c8" }}
                 onClick={() => setPendingDeleteBatch(batch)}
               >
-                {t("wsDeleteWorkspace")}
+                🗑️ {t("wsDeleteWorkspace")}
               </button>
               <button
                 className="btn btn-primary btn-sm"
@@ -1427,7 +1467,7 @@ export default function WorkspaceView() {
               <div className="ws-prop-tile">
                 <div className="ws-prop-tile-label">{t("wsShootDateLabel")}</div>
                 <input
-                  className="form-input"
+                  className="form-input ws-shoot-date-input"
                   type="date"
                   value={batch.shootDate || ""}
                   onChange={(e) => setBatchField("shootDate", e.target.value)}
@@ -1436,7 +1476,7 @@ export default function WorkspaceView() {
               <div className="ws-prop-tile">
                 <div className="ws-prop-tile-label">{t("wsDeadlineLabel")}</div>
                 <input
-                  className="form-input"
+                  className="form-input ws-deadline-date-input"
                   type="date"
                   value={batch.deadline || ""}
                   onChange={(e) => setBatchField("deadline", e.target.value)}
@@ -1446,14 +1486,19 @@ export default function WorkspaceView() {
                 <div className="ws-prop-tile-label">{t("wsEditorLabel")}</div>
                 <select
                   className="form-select"
-                  value={batch.editor || "Lex"}
+                  value={batch.editor || ""}
                   onChange={(e) => setBatchField("editor", e.target.value)}
                 >
-                  {["Paolo", "Lex", "Rick", "Ray", "Boy"].map((name) => (
-                    <option key={name} value={name}>
-                      {name}
+                  <option value="">{t("wsTeamPlaceholder")}</option>
+                  {teamMembers.map((member) => (
+                    <option key={member._id || member.email || member.name} value={member.name}>
+                      {member.name}
                     </option>
                   ))}
+                  {batch.editor &&
+                    !teamMembers.some((member) => member.name === batch.editor) && (
+                      <option value={batch.editor}>{batch.editor}</option>
+                    )}
                 </select>
               </div>
               <div className="ws-prop-tile">
@@ -2419,7 +2464,9 @@ export default function WorkspaceView() {
                         <div className="ws-td-inner">
                           <span
                             className={
-                              b.shootDate ? "ws-date-cell" : "ws-date-empty"
+                              b.shootDate
+                                ? "ws-date-cell ws-date-shoot"
+                                : "ws-date-empty"
                             }
                           >
                             {formatShortDate(b.shootDate)}
@@ -2507,7 +2554,7 @@ export default function WorkspaceView() {
                         <div className="ws-td-inner">
                           {b.deadline ? (
                             <span
-                              style={{ fontSize: 13, color: "var(--orange)" }}
+                              className="ws-date-cell ws-date-deadline"
                             >
                               {formatShortDate(b.deadline)}
                             </span>

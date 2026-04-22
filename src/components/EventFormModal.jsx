@@ -55,7 +55,6 @@ export default function EventFormModal({
     if (!form.name?.trim()) next.name = t('eventValidationNameRequired');
     if (!form.dateTime?.trim()) next.dateTime = t('eventValidationDateTimeRequired');
     if (!form.assigneeId?.trim()) next.assigneeId = t('eventValidationAssigneeRequired');
-    if (!form.client?.trim()) next.client = t('eventValidationClientRequired');
     setFieldErrors(next);
     if (Object.keys(next).length) return;
 
@@ -65,14 +64,15 @@ export default function EventFormModal({
       return;
     }
 
-    const clientRow = clients.find((c) => c.name === form.client);
+    const clientValue = form.client?.trim() || '';
+    const clientRow = clientValue ? clients.find((c) => c.name === clientValue) : null;
     const body = {
       name: form.name.trim(),
       type: form.type,
       date,
       time: time || '12:00',
       notes: form.notes?.trim() || '',
-      client: form.client,
+      ...(clientValue && { client: clientValue }),
       ...(clientRow?._id && { clientId: clientRow._id }),
       assigneeId: form.assigneeId.trim(),
     };

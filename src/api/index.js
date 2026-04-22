@@ -63,6 +63,12 @@ export const getClient = (id) => req("GET", `/clients/${id}`);
 export const createClient = (data) => req("POST", "/clients", data);
 export const updateClient = (id, data) => req("PUT", `/clients/${id}`, data);
 export const deleteClient = (id) => req("DELETE", `/clients/${id}`);
+export const getClientDocuments = (clientId) =>
+  req("GET", `/clients/${clientId}/documents`);
+export const presignClientDocumentUpload = (clientId, payload) =>
+  req("POST", `/clients/${clientId}/documents/presign`, payload);
+export const createClientDocument = (clientId, payload) =>
+  req("POST", `/clients/${clientId}/documents`, payload);
 
 // Team
 export const getTeamMembers = () => req("GET", "/team");

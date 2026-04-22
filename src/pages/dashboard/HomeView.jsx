@@ -148,13 +148,15 @@ function WeekGrid({ start, events, tasks, workspaces, onDayClick, isTeam, locale
                         }
                       }}
                     >
-                      <span className="event-chip-name">{e.name}</span>
+                      <span className="event-chip-text">
+                        <span className="event-chip-name">{e.name}</span>
+                        {timeDisp ? <span className="event-chip-time">{timeDisp}</span> : null}
+                      </span>
                       {initials ? (
                         <span className="event-chip-ini" style={monoStyle} title={assigneeName || undefined}>
                           {initials}
                         </span>
                       ) : null}
-                      {timeDisp ? <span className="event-chip-time">{timeDisp}</span> : null}
                     </div>
                   );
                 }
@@ -166,13 +168,15 @@ function WeekGrid({ start, events, tasks, workspaces, onDayClick, isTeam, locale
                     style={{ background: 'var(--bg-alt)', color: 'var(--text-2)' }}
                     title={item.title}
                   >
-                    <span className="event-chip-name">
-                      {isTask ? 'Task: ' : 'Workspace: '}
-                      {item.title}
-                    </span>
-                    <span className="event-chip-time">
-                      {item.perspectiveLabel}
-                      {item.meta ? ` · ${item.meta}` : ''}
+                    <span className="event-chip-text">
+                      <span className="event-chip-name">
+                        {isTask ? 'Task: ' : 'Workspace: '}
+                        {item.title}
+                      </span>
+                      <span className="event-chip-time">
+                        {item.perspectiveLabel}
+                        {item.meta ? ` · ${item.meta}` : ''}
+                      </span>
                     </span>
                   </div>
                 );

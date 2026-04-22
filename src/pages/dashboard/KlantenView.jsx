@@ -13,6 +13,9 @@ import {
   getPortalNotes,
   getPortalVideos,
   getBatches,
+  getClientDocuments,
+  presignClientDocumentUpload,
+  createClientDocument,
 } from '../../api';
 import { useLang } from '../../context/LangContext';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -552,9 +555,270 @@ function PortaalTab({ client }) {
   );
 }
 
+function fmtFileSize(sizeBytes) {
+  const n = Number(sizeBytes);
+  if (!Number.isFinite(n) || n < 0) return '—';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function DocumentenTab({ client, lang }) {
+  const qc = useQueryClient();
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [uploadError, setUploadError] = useState('');
+
+  useEffect(() => {
+    setSelectedFile(null);
+    setPreviewUrl('');
+    setUploadError('');
+  }, [client?._id]);
+
+  useEffect(() => {
+    if (!selectedFile || !selectedFile.type?.startsWith('image/')) {
+      setPreviewUrl('');
+      return undefined;
+    }
+    const url = URL.createObjectURL(selectedFile);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [selectedFile]);
+
+  const { data: docs = [], isLoading } = useQuery({
+    queryKey: ['clientDocuments', client._id],
+    queryFn: () => getClientDocuments(client._id),
+    enabled: !!client?._id,
+  });
+
+  const uploadMut = useMutation({
+    mutationFn: async () => {
+      if (!selectedFile) throw new Error(lang === 'en' ? 'Select a file first.' : 'Selecteer eerst een bestand.');
+      const presign = await presignClientDocumentUpload(client._id, {
+        filename: selectedFile.name,
+        contentType: selectedFile.type || 'application/octet-stream',
+      });
+
+      const uploadRes = await fetch(presign.uploadUrl, {
+        method: presign.method || 'PUT',
+        headers: { 'Content-Type': presign.contentType || selectedFile.type || 'application/octet-stream' },
+        body: selectedFile,
+      });
+      if (!uploadRes.ok) {
+        throw new Error(lang === 'en' ? 'File upload failed.' : 'Bestand uploaden mislukt.');
+      }
+
+      return createClientDocument(client._id, {
+        key: presign.key,
+        fileUrl: presign.fileUrl,
+        name: selectedFile.name,
+        contentType: selectedFile.type || undefined,
+        sizeBytes: selectedFile.size,
+      });
+    },
+    onSuccess: () => {
+      setSelectedFile(null);
+      setUploadError('');
+      qc.invalidateQueries({ queryKey: ['clientDocuments', client._id] });
+    },
+    onError: (e) => {
+      setUploadError(e.message || (lang === 'en' ? 'Could not upload document.' : 'Document kon niet worden geüpload.'));
+    },
+  });
+
+  const handleUploadClick = () => {
+    if (!selectedFile) {
+      setUploadError(lang === 'en' ? 'Please select a document first.' : 'Selecteer eerst een document.');
+      return;
+    }
+    setUploadError('');
+    uploadMut.mutate();
+  };
+
+  const fileTypeLabel = selectedFile?.type
+    ? selectedFile.type
+    : lang === 'en'
+      ? 'Unknown type'
+      : 'Onbekend type';
+
+  return (
+    <div style={{ padding: '12px 0' }}>
+      <div
+        style={{
+          border: '1.5px dashed var(--border)',
+          borderRadius: '10px',
+          background: 'var(--bg-alt)',
+          padding: '14px',
+          marginBottom: '14px',
+          display: 'grid',
+          gridTemplateColumns: 'minmax(240px, 1fr) auto',
+          columnGap: '14px',
+          rowGap: '12px',
+          alignItems: 'center',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 }}>
+          <input
+            type="file"
+            onChange={(e) => {
+              const file = e.target.files?.[0] || null;
+              setSelectedFile(file);
+              setUploadError('');
+            }}
+            style={{ maxWidth: '100%' }}
+          />
+          <span style={{ fontSize: '12px', color: 'var(--text-3)' }}>
+            {lang === 'en' ? 'Choose a file to upload for this client.' : 'Kies een bestand om te uploaden voor deze klant.'}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={handleUploadClick}
+          disabled={uploadMut.isPending}
+          style={uploadMut.isPending ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : { alignSelf: 'center' }}
+        >
+          {uploadMut.isPending ? (
+            <>
+              <LoadingSpinner size={16} />
+              <span>{lang === 'en' ? 'Uploading…' : 'Uploaden…'}</span>
+            </>
+          ) : (
+            lang === 'en' ? 'Upload document' : 'Document uploaden'
+          )}
+        </button>
+
+        {selectedFile && (
+          <div
+            style={{
+              gridColumn: '1 / -1',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              background: 'white',
+              padding: '10px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              minWidth: 0,
+            }}
+          >
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt={selectedFile.name}
+                style={{ width: '42px', height: '42px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-alt)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '18px',
+                }}
+              >
+                📄
+              </div>
+            )}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '13px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selectedFile.name}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>
+                {fmtFileSize(selectedFile.size)} · {fileTypeLabel}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {uploadError && (
+        <p role="alert" style={{ ...fieldErrStyle, marginBottom: '12px' }}>
+          {uploadError}
+        </p>
+      )}
+
+      {isLoading ? (
+        <div style={{ fontSize: '13px', color: 'var(--text-3)' }}>{lang === 'en' ? 'Loading documents…' : 'Documenten laden…'}</div>
+      ) : docs.length === 0 ? (
+        <div style={{ fontSize: '13px', color: 'var(--text-3)', fontStyle: 'italic' }}>
+          {lang === 'en' ? 'No documents yet. Upload your first file above.' : 'Nog geen documenten. Upload hierboven je eerste bestand.'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {docs.map((doc) => (
+            <div
+              key={doc._id || doc.key}
+              style={{
+                background: 'var(--bg-alt)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '10px 12px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: '13px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {doc.name || 'document'}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>
+                  {fmtFileSize(doc.sizeBytes)} · {doc.uploadedByName || '—'} ·{' '}
+                  {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString(lang === 'en' ? 'en-GB' : 'nl-NL') : '—'}
+                </div>
+              </div>
+              <a href={doc.url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
+                {lang === 'en' ? 'Open' : 'Openen'}
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const fieldErrStyle = { fontSize: '12px', color: '#c04040', marginTop: '6px', marginBottom: 0, lineHeight: 1.4 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function getClientContacts(client) {
+  const fromArray = Array.isArray(client?.contacts) ? client.contacts : [];
+  const normalized = fromArray
+    .map((contact) => ({
+      name: (contact?.name || '').trim(),
+      email: (contact?.email || '').trim(),
+      phone: (contact?.phone || '').trim(),
+      role: (contact?.role || '').trim(),
+      primary: !!contact?.primary,
+    }))
+    .filter((contact) => contact.name || contact.email || contact.phone || contact.role);
+
+  if (normalized.length === 0) {
+    const fallback = {
+      name: (client?.contact || '').trim(),
+      email: (client?.email || '').trim(),
+      phone: (client?.phone || '').trim(),
+      role: '',
+      primary: true,
+    };
+    if (fallback.name || fallback.email || fallback.phone) normalized.push(fallback);
+  }
+
+  if (normalized.length > 0 && !normalized.some((contact) => contact.primary)) {
+    normalized[0].primary = true;
+  }
+  return normalized;
+}
 
 function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onClearServerError }) {
   const [name, setName] = useState('');
@@ -627,6 +891,17 @@ function AddClientModal({ open, onClose, onSave, saving, lang, serverError, onCl
       contact: contact.trim() || undefined,
       email: em ? em : undefined,
       phone: phone.trim() || undefined,
+      contacts:
+        contact.trim() || em || phone.trim()
+          ? [
+              {
+                name: contact.trim() || undefined,
+                email: em || undefined,
+                phone: phone.trim() || undefined,
+                primary: true,
+              },
+            ]
+          : undefined,
       since: since || undefined,
       color: pickColor(name),
       portalEmail: pe || undefined,
@@ -998,6 +1273,19 @@ export default function KlantenView() {
   const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [portalAccessOpen, setPortalAccessOpen] = useState(false);
+  const [contactsDraft, setContactsDraft] = useState([]);
+  const [isInfoEditing, setIsInfoEditing] = useState(false);
+  const [infoDraft, setInfoDraft] = useState({
+    name: '',
+    sector: '',
+    contact: '',
+    email: '',
+    phone: '',
+    since: '',
+    phase: '',
+    notes: '',
+    status: 'active',
+  });
   const [addSaveError, setAddSaveError] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [portalAccessError, setPortalAccessError] = useState('');
@@ -1026,6 +1314,44 @@ export default function KlantenView() {
   useEffect(() => {
     if (clientIdParam) setTab('info');
   }, [clientIdParam]);
+
+  useEffect(() => {
+    if (!selected?._id) {
+      setContactsDraft([]);
+      return;
+    }
+    setContactsDraft(getClientContacts(selected));
+  }, [selected?._id, selected?.contacts, selected?.contact, selected?.email, selected?.phone]);
+
+  useEffect(() => {
+    if (!selected?._id) {
+      setIsInfoEditing(false);
+      return;
+    }
+    setInfoDraft({
+      name: selected.name || '',
+      sector: selected.sector || '',
+      contact: selected.contact || '',
+      email: selected.email || '',
+      phone: selected.phone || '',
+      since: selected.since || '',
+      phase: selected.phase || '',
+      notes: selected.notes || '',
+      status: selected.urgent ? 'urgent' : 'active',
+    });
+    setIsInfoEditing(false);
+  }, [
+    selected?._id,
+    selected?.name,
+    selected?.sector,
+    selected?.contact,
+    selected?.email,
+    selected?.phone,
+    selected?.since,
+    selected?.phase,
+    selected?.notes,
+    selected?.urgent,
+  ]);
 
   const updateMut = useMutation({
     mutationFn: ({ id, ...d }) => updateClient(id, d),
@@ -1093,6 +1419,45 @@ export default function KlantenView() {
   const saveClient = (data) => {
     if (!selected) return;
     updateMut.mutate({ id: selected._id, ...data });
+  };
+
+  const saveInfoChanges = () => {
+    const primaryContacts = getClientContacts(selected);
+    const nextContacts = primaryContacts.length
+      ? primaryContacts.map((item, idx) =>
+          item.primary || idx === 0
+            ? {
+                ...item,
+                name: infoDraft.contact.trim(),
+                email: infoDraft.email.trim(),
+                phone: infoDraft.phone.trim(),
+              }
+            : item,
+        )
+      : [
+          {
+            name: infoDraft.contact.trim(),
+            email: infoDraft.email.trim(),
+            phone: infoDraft.phone.trim(),
+            role: '',
+            primary: true,
+          },
+        ];
+
+    saveClient({
+      name: infoDraft.name.trim(),
+      sector: infoDraft.sector.trim() || undefined,
+      phase: infoDraft.phase.trim() || undefined,
+      since: infoDraft.since || undefined,
+      notes: infoDraft.notes.trim() || undefined,
+      contact: infoDraft.contact.trim() || undefined,
+      email: infoDraft.email.trim() || undefined,
+      phone: infoDraft.phone.trim() || undefined,
+      urgent: infoDraft.status === 'urgent',
+      urgentReason: infoDraft.status === 'urgent' ? selected?.urgentReason || 'Urgent' : undefined,
+      contacts: nextContacts,
+    });
+    setIsInfoEditing(false);
   };
 
   const deleteCurrent = () => {
@@ -1213,6 +1578,54 @@ export default function KlantenView() {
                   </div>
                 )}
               </div>
+              {tab === 'info' && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    if (isInfoEditing) {
+                      setInfoDraft({
+                        name: c.name || '',
+                        sector: c.sector || '',
+                        contact: c.contact || '',
+                        email: c.email || '',
+                        phone: c.phone || '',
+                        since: c.since || '',
+                        phase: c.phase || '',
+                        notes: c.notes || '',
+                        status: c.urgent ? 'urgent' : 'active',
+                      });
+                    }
+                    setIsInfoEditing((prev) => !prev);
+                  }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M4 20h4l10-10-4-4L4 16v4z"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M13 7l4 4"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  {isInfoEditing ? (lang === 'en' ? 'Cancel edit' : 'Bewerken annuleren') : lang === 'en' ? 'Edit' : 'Bewerk'}
+                </button>
+              )}
             </div>
             <div className="tabs klanten-tabs" style={{ marginBottom: '24px' }}>
               {TABS.map((tb) => (
@@ -1228,113 +1641,268 @@ export default function KlantenView() {
             </div>
             {tab === 'info' && (
               <div>
-                <div className="detail-grid">
-                  {[
-                    [t('contact'), c.contact],
-                    ['E-mail', c.portalEmail || c.email],
-                    [t('phone'), c.phone],
-                    [t('clientSince'), fmtDate(c.since)],
-                    [t('phase'), c.phase],
-                    [
-                      t('statusLabel'),
-                      <span key="st" style={{ color: c.urgent ? 'var(--orange)' : 'var(--sage)' }}>
-                        {c.urgent ? t('urgentStatus') : t('active')}
-                      </span>,
-                    ],
-                  ].map(([l, v]) => (
-                    <div key={l} className="detail-field">
-                      <label>{l}</label>
-                      <p>{v ?? '—'}</p>
+                {isInfoEditing ? (
+                  <div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                      {[
+                        ['name', lang === 'en' ? 'Company name' : 'Bedrijfsnaam', lang === 'en' ? 'Company name' : 'Naam van het bedrijf'],
+                        ['sector', lang === 'en' ? 'Sector' : 'Sector', 'bijv. Fitness & Wellness'],
+                        ['contact', t('contact'), lang === 'en' ? 'Primary contact person' : 'Primaire contactpersoon'],
+                        ['email', 'E-mail', 'email@bedrijf.nl'],
+                        ['phone', t('phone'), '06-12345678'],
+                        ['phase', t('phase'), 'Pre-prod'],
+                      ].map(([key, label, placeholder]) => (
+                        <div key={key} className="form-group">
+                          <label className="form-label">{label}</label>
+                          <input
+                            className="form-input"
+                            value={infoDraft[key]}
+                            placeholder={placeholder}
+                            type={key === 'email' ? 'email' : 'text'}
+                            onChange={(e) => setInfoDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+                          />
+                        </div>
+                      ))}
+                      <div className="form-group">
+                        <label className="form-label">{t('clientSince')}</label>
+                        <input
+                          className="form-input"
+                          type="date"
+                          value={infoDraft.since}
+                          onChange={(e) => setInfoDraft((prev) => ({ ...prev, since: e.target.value }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">{t('statusLabel')}</label>
+                        <select
+                          className="form-input"
+                          value={infoDraft.status}
+                          onChange={(e) => setInfoDraft((prev) => ({ ...prev, status: e.target.value }))}
+                        >
+                          <option value="active">{t('active')}</option>
+                          <option value="urgent">{t('urgentStatus')}</option>
+                        </select>
+                      </div>
                     </div>
-                  ))}
-                </div>
-                <div className="detail-notes">
-                  <strong
-                    style={{
-                      display: 'block',
-                      marginBottom: '6px',
-                      fontSize: '11px',
-                      letterSpacing: '.08em',
-                      textTransform: 'uppercase',
-                      color: 'var(--text-3)',
-                    }}
-                  >
-                    {t('notes')}
-                  </strong>
-                  <p style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: 1.6 }}>
-                    {typeof c.notes === 'string' && c.notes.trim() ? c.notes : lang === 'en' ? 'No notes yet.' : 'Geen notities beschikbaar.'}
-                  </p>
-                </div>
+                    <div className="detail-notes" style={{ marginTop: '8px' }}>
+                      <strong
+                        style={{
+                          display: 'block',
+                          marginBottom: '6px',
+                          fontSize: '11px',
+                          letterSpacing: '.08em',
+                          textTransform: 'uppercase',
+                          color: 'var(--text-3)',
+                        }}
+                      >
+                        {t('notes')}
+                      </strong>
+                      <textarea
+                        className="form-input"
+                        value={infoDraft.notes}
+                        rows={4}
+                        onChange={(e) => setInfoDraft((prev) => ({ ...prev, notes: e.target.value }))}
+                        placeholder={lang === 'en' ? 'Add client notes…' : 'Voeg klantnotities toe…'}
+                        style={{ minHeight: '92px', resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={updateMut.isPending}
+                        onClick={saveInfoChanges}
+                        style={updateMut.isPending ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : undefined}
+                      >
+                        {updateMut.isPending ? (
+                          <>
+                            <LoadingSpinner size={18} />
+                            <span>{lang === 'en' ? 'Saving…' : 'Opslaan…'}</span>
+                          </>
+                        ) : (
+                          lang === 'en' ? 'Save changes' : 'Wijzigingen opslaan'
+                        )}
+                      </button>
+                      <button type="button" className="btn btn-ghost" onClick={() => setIsInfoEditing(false)}>
+                        {lang === 'en' ? 'Cancel' : 'Annuleer'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="detail-grid">
+                      {[
+                        [t('contact'), c.contact],
+                        ['E-mail', c.portalEmail || c.email],
+                        [t('phone'), c.phone],
+                        [t('clientSince'), fmtDate(c.since)],
+                        [t('phase'), c.phase],
+                        [
+                          t('statusLabel'),
+                          <span key="st" style={{ color: c.urgent ? 'var(--orange)' : 'var(--sage)' }}>
+                            {c.urgent ? t('urgentStatus') : t('active')}
+                          </span>,
+                        ],
+                      ].map(([l, v]) => (
+                        <div key={l} className="detail-field">
+                          <label>{l}</label>
+                          <p>{v ?? '—'}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="detail-notes">
+                      <strong
+                        style={{
+                          display: 'block',
+                          marginBottom: '6px',
+                          fontSize: '11px',
+                          letterSpacing: '.08em',
+                          textTransform: 'uppercase',
+                          color: 'var(--text-3)',
+                        }}
+                      >
+                        {t('notes')}
+                      </strong>
+                      <p style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: 1.6 }}>
+                        {typeof c.notes === 'string' && c.notes.trim() ? c.notes : lang === 'en' ? 'No notes yet.' : 'Geen notities beschikbaar.'}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             )}
             {tab === 'portaal' && <PortaalTab client={c} />}
+            {tab === 'documenten' && <DocumentenTab client={c} lang={lang} />}
             {tab === 'retainer' && <RetainerTab client={c} onSave={saveClient} />}
             {tab === 'contacten' && (
               <div style={{ padding: '12px 0' }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '14px',
-                    padding: '14px 0',
-                    borderBottom: '1px solid var(--border)',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      background: c.color || 'var(--accent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontFamily: 'Montserrat',
-                      fontSize: '14px',
-                      fontWeight: '700',
-                      color: 'white',
-                    }}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>
+                    {lang === 'en' ? 'Manage one or more contact persons for this client.' : 'Beheer een of meerdere contactpersonen voor deze klant.'}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() =>
+                      setContactsDraft((prev) => [
+                        ...prev,
+                        { name: '', email: '', phone: '', role: '', primary: prev.length === 0 },
+                      ])
+                    }
                   >
-                    {(c.contact && c.contact[0]) || '?'}
+                    + {lang === 'en' ? 'Add contact' : 'Contact toevoegen'}
+                  </button>
+                </div>
+
+                {contactsDraft.length === 0 ? (
+                  <div style={{ fontSize: '13px', color: 'var(--text-3)', fontStyle: 'italic' }}>
+                    {lang === 'en' ? 'No contacts yet. Add one to get started.' : 'Nog geen contacten. Voeg er een toe om te beginnen.'}
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '14px', fontWeight: '500' }}>
-                      {c.contact || '—'}{' '}
-                      <span
-                        style={{
-                          background: 'var(--accent-pale)',
-                          color: 'var(--accent)',
-                          fontSize: '10px',
-                          fontWeight: '700',
-                          padding: '2px 7px',
-                          borderRadius: '10px',
-                        }}
-                      >
-                        Primair
-                      </span>
+                ) : (
+                  contactsDraft.map((contactItem, idx) => (
+                    <div
+                      key={`${idx}-${contactItem.email || contactItem.name || 'contact'}`}
+                      style={{
+                        border: '1px solid var(--border)',
+                        borderRadius: '10px',
+                        padding: '12px',
+                        marginBottom: '10px',
+                        background: 'var(--bg-alt)',
+                      }}
+                    >
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                        {[
+                          ['name', lang === 'en' ? 'Name' : 'Naam', lang === 'en' ? 'Contact name' : 'Naam contactpersoon'],
+                          ['email', 'E-mail', 'email@bedrijf.nl'],
+                          ['phone', lang === 'en' ? 'Phone' : 'Telefoon', '06-12345678'],
+                          ['role', lang === 'en' ? 'Role' : 'Rol', lang === 'en' ? 'e.g. Marketing manager' : 'bijv. Marketing manager'],
+                        ].map(([key, label, placeholder]) => (
+                          <label key={`${idx}-${key}`} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+                              {label}
+                            </span>
+                            <input
+                              value={contactItem[key]}
+                              placeholder={placeholder}
+                              onChange={(e) =>
+                                setContactsDraft((prev) =>
+                                  prev.map((item, itemIdx) =>
+                                    itemIdx === idx ? { ...item, [key]: e.target.value } : item,
+                                  ),
+                                )
+                              }
+                              style={{
+                                width: '100%',
+                                padding: '9px 12px',
+                                border: '1.5px solid var(--border)',
+                                borderRadius: '8px',
+                                fontFamily: 'DM Sans,sans-serif',
+                                fontSize: '13px',
+                                color: 'var(--text)',
+                                background: 'white',
+                                outline: 'none',
+                                boxSizing: 'border-box',
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: '10px', display: 'flex', gap: '8px', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() =>
+                            setContactsDraft((prev) =>
+                              prev.map((item, itemIdx) => ({ ...item, primary: itemIdx === idx })),
+                            )
+                          }
+                        >
+                          {contactItem.primary ? (lang === 'en' ? 'Primary contact' : 'Primair contact') : (lang === 'en' ? 'Set as primary' : 'Maak primair')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: '#c04040', borderColor: '#e8c8c8' }}
+                          onClick={() =>
+                            setContactsDraft((prev) => {
+                              const next = prev.filter((_, itemIdx) => itemIdx !== idx);
+                              if (next.length > 0 && !next.some((item) => item.primary)) {
+                                next[0] = { ...next[0], primary: true };
+                              }
+                              return next;
+                            })
+                          }
+                        >
+                          {lang === 'en' ? 'Remove' : 'Verwijderen'}
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '3px' }}>
-                      📧 {c.email || '—'} · 📱 {c.phone || '—'}
-                    </div>
-                  </div>
-                  {c.email && (
-                    <a href={`mailto:${c.email}`} className="btn btn-ghost btn-sm">
-                      E-mail
-                    </a>
-                  )}
+                  ))
+                )}
+
+                <div style={{ marginTop: '14px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={updateMut.isPending}
+                    onClick={() => saveClient({ contacts: contactsDraft })}
+                    style={updateMut.isPending ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : undefined}
+                  >
+                    {updateMut.isPending ? (
+                      <>
+                        <LoadingSpinner size={18} />
+                        <span>{lang === 'en' ? 'Saving…' : 'Opslaan…'}</span>
+                      </>
+                    ) : (
+                      lang === 'en' ? 'Save contacts' : 'Contacten opslaan'
+                    )}
+                  </button>
                 </div>
               </div>
             )}
-            {(tab === 'documenten' || tab === 'vragenlijst') && (
+            {tab === 'vragenlijst' && (
               <div style={{ fontSize: '13px', color: 'var(--text-3)', fontStyle: 'italic', padding: '12px 0' }}>
-                {tab === 'documenten'
-                  ? lang === 'en'
-                    ? 'Documents will appear here once added.'
-                    : 'Documenten worden hier getoond zodra ze worden toegevoegd.'
-                  : lang === 'en'
-                    ? 'Not filled in for this client yet.'
-                    : 'Nog niet ingevuld voor deze klant.'}
+                {lang === 'en' ? 'Not filled in for this client yet.' : 'Nog niet ingevuld voor deze klant.'}
               </div>
             )}
           </div>

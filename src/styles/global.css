@@ -949,7 +949,7 @@ ul {
 }
 .week-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
 }
 .day-cell {
@@ -958,6 +958,7 @@ ul {
   padding: 10px 8px;
   box-shadow: var(--shadow);
   min-height: 90px;
+  min-width: 0;
   transition: all var(--transition);
   cursor: pointer;
   border: 1.5px solid transparent;
@@ -1050,7 +1051,7 @@ ul {
 
 .chip.event-chip-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 5px;
   max-width: 100%;
   min-width: 0;
@@ -1058,8 +1059,16 @@ ul {
   font-size: 8px;
   line-height: 1.2;
 }
-.event-chip-name {
+.event-chip-text {
+  display: flex;
   flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.event-chip-name {
+  width: 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1093,7 +1102,11 @@ ul {
   box-shadow: 0 1px 2px rgba(28, 20, 16, 0.08);
 }
 .event-chip-time {
-  flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 7.5px;
   font-weight: 700;
   opacity: 0.95;
@@ -3517,6 +3530,14 @@ body.agenda-fs #fs-legend {
   color: var(--text-2);
   white-space: nowrap;
 }
+.ws-date-cell.ws-date-shoot {
+  color: #b58900;
+  font-weight: 600;
+}
+.ws-date-cell.ws-date-deadline {
+  color: #c04040;
+  font-weight: 600;
+}
 .ws-date-empty {
   color: var(--text-3);
   font-style: italic;
@@ -5532,6 +5553,14 @@ body.agenda-fs #fs-legend {
   padding: 5px 10px;
   font-size: 12px;
   border-radius: 7px;
+}
+.ws-detail-surface .ws-shoot-date-input {
+  background: #fff8d9;
+  border-color: #e9d38b;
+}
+.ws-detail-surface .ws-deadline-date-input {
+  background: #fff0f0;
+  border-color: #e8baba;
 }
 
 .ws-detail-surface .ws-sop-title {
