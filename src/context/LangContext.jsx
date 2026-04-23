@@ -164,6 +164,7 @@ const strings = {
     wsNewWorkspaceProject: "Nieuw workspace project",
     wsProjectNameLabel: "Project naam",
     wsProjectNameExample: "bijv. Vermado Automotive S2",
+    wsProjectNameRequired: "Project naam is verplicht.",
     wsEditorRoleEditor: "Editor",
     wsCreateProject: "Project aanmaken",
     wsScriptPlaceholder:
@@ -636,6 +637,7 @@ const strings = {
     wsNewWorkspaceProject: "New workspace project",
     wsProjectNameLabel: "Project name",
     wsProjectNameExample: "e.g. Vermado Automotive S2",
+    wsProjectNameRequired: "Project name is required.",
     wsEditorRoleEditor: "Editor",
     wsCreateProject: "Create project",
     wsScriptPlaceholder:

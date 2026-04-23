@@ -160,6 +160,9 @@ export default function WorkspaceView() {
   const [addVideoBatchId, setAddVideoBatchId] = useState(null);
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showCreateBatchModal, setShowCreateBatchModal] = useState(false);
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [projectNameDraft, setProjectNameDraft] = useState("");
+  const [projectNameError, setProjectNameError] = useState("");
   const [newBatchSubName, setNewBatchSubName] = useState("");
   const [newBatch, setNewBatch] = useState({
     name: "",
@@ -652,6 +655,72 @@ export default function WorkspaceView() {
             }}
           >
             {t("wsDeleteWorkspace")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const editProjectOverlay = showEditProjectModal && batch && (
+    <div
+      className="modal-overlay open"
+      onMouseDown={() => setShowEditProjectModal(false)}
+    >
+      <div className="modal" style={{ maxWidth: "520px" }} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">{t("wsEditProject")}</div>
+          <button
+            className="modal-close"
+            onClick={() => setShowEditProjectModal(false)}
+          >
+            ✕
+          </button>
+        </div>
+        <div className="form-group">
+          <label className="form-label" htmlFor="ws-edit-project-name">{t("wsProjectNameLabel")}</label>
+          <input
+            id="ws-edit-project-name"
+            className="form-input"
+            value={projectNameDraft}
+            onChange={(e) => {
+              setProjectNameDraft(e.target.value);
+              if (projectNameError) setProjectNameError("");
+            }}
+            placeholder={t("wsProjectNameExample")}
+          />
+          {projectNameError ? (
+            <div style={{ marginTop: "6px", fontSize: "12px", color: "#c04040" }}>
+              {projectNameError}
+            </div>
+          ) : null}
+        </div>
+        <div className="modal-footer">
+          <button
+            className="btn btn-ghost"
+            onClick={() => setShowEditProjectModal(false)}
+          >
+            {t("cancel")}
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              const nextName = projectNameDraft.trim();
+              if (!nextName) {
+                setProjectNameError(t("wsProjectNameRequired"));
+                return;
+              }
+              updateBatchMut.mutate(
+                { id: batch._id, data: { name: nextName } },
+                {
+                  onSuccess: () => {
+                    setShowEditProjectModal(false);
+                    setProjectNameError("");
+                  },
+                },
+              );
+            }}
+          >
+            {t("save")}
           </button>
         </div>
       </div>
@@ -1389,6 +1458,16 @@ export default function WorkspaceView() {
               </span>
             </div>
             <div className="ws-detail-actions">
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setProjectNameDraft(batch.name || "");
+                  setProjectNameError("");
+                  setShowEditProjectModal(true);
+                }}
+              >
+                ✏️ {t("wsEditProject")}
+              </button>
               <button
                 className="btn btn-ghost btn-sm"
                 style={{ color: "#c04040", borderColor: "#e8c8c8" }}
@@ -2297,6 +2376,7 @@ export default function WorkspaceView() {
           </div>
         )}
         {deleteWorkspaceOverlay}
+        {editProjectOverlay}
         {scriptShotSopOverlays}
         {batchCreateOverlay}
         {subBatchCreateOverlay}

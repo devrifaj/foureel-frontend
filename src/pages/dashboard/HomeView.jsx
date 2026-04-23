@@ -76,6 +76,15 @@ function getWorkspaceDayItems(workspaces, ds) {
   });
   return items;
 }
+function getDayItemChipStyle(item) {
+  if (item.kind === 'workspace' && item.perspectiveLabel === 'Shoot date') {
+    return { background: 'var(--amber)', color: '#1b1b1f' };
+  }
+  if (item.kind === 'workspace' && item.perspectiveLabel === 'Deadline') {
+    return { background: '#e05050', color: '#ffffff' };
+  }
+  return { background: 'var(--bg-alt)', color: 'var(--text-2)' };
+}
 
 function WeekGrid({ start, events, tasks, workspaces, onDayClick, isTeam, locale, isLoading }) {
   const TODAY = new Date(); TODAY.setHours(0,0,0,0);
@@ -165,7 +174,7 @@ function WeekGrid({ start, events, tasks, workspaces, onDayClick, isTeam, locale
                   <div
                     key={`${item.kind}-${item.id}`}
                     className="chip event-chip-row"
-                    style={{ background: 'var(--bg-alt)', color: 'var(--text-2)' }}
+                    style={getDayItemChipStyle(item)}
                     title={item.title}
                   >
                     <span className="event-chip-text">

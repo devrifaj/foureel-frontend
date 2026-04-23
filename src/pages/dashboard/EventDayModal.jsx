@@ -11,10 +11,13 @@ const TYPE_COLOR = {
   Call: 'var(--blue)',
   Delivery: 'var(--purple)',
 };
-const ITEM_COLOR = {
-  task: 'var(--blue)',
-  workspace: 'var(--purple)',
-};
+function getItemColor(item) {
+  if (item.kind === 'task') return 'var(--blue)';
+  if (item.kind === 'workspace' && item.perspectiveLabel === 'Shoot date') return 'var(--amber)';
+  if (item.kind === 'workspace' && item.perspectiveLabel === 'Deadline') return '#e05050';
+  if (item.kind === 'workspace') return 'var(--purple)';
+  return 'var(--text-3)';
+}
 
 /**
  * Day summary: list events, add new, or open an event for editing.
@@ -50,7 +53,7 @@ export default function EventDayModal({ date, events = [], items, onClose, onAdd
                     className="day-event-item"
                     onClick={() => onItemClick?.(item)}
                   >
-                    <div className="event-dot" style={{ background: ITEM_COLOR[item.kind] || 'var(--text-3)' }} />
+                    <div className="event-dot" style={{ background: getItemColor(item) }} />
                     <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
                       <div className="day-event-title-row">
                         <span className="day-event-name">

@@ -70,6 +70,15 @@ function getWorkspaceDayItems(workspaces, ds) {
   });
   return items;
 }
+function getDayItemChipStyle(item) {
+  if (item.kind === 'workspace' && item.perspectiveLabel === 'Shoot date') {
+    return { background: 'var(--amber)', color: '#1b1b1f' };
+  }
+  if (item.kind === 'workspace' && item.perspectiveLabel === 'Deadline') {
+    return { background: '#e05050', color: '#ffffff' };
+  }
+  return { background: 'var(--bg-alt)', color: 'var(--text-2)' };
+}
 
 export default function AgendaView() {
   const navigate = useNavigate();
@@ -345,7 +354,7 @@ export default function AgendaView() {
                       <div
                         key={`${item.kind}-${item.id}`}
                         className="chip event-chip-row"
-                        style={{ background: 'var(--bg-alt)', color: 'var(--text-2)' }}
+                        style={getDayItemChipStyle(item)}
                         title={item.title}
                       >
                         <span className="event-chip-text">
