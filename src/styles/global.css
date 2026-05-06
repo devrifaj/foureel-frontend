@@ -1624,7 +1624,7 @@ ul {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 36px;
-  max-width: 700px;
+  max-width: 980px;
 }
 .detail-header {
   display: flex;
