@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useLang } from '../../context/LangContext';
-import { getPortalMe, sendClientNote, saveQuestionnaire } from '../../api';
+import { getPortalMe, sendClientNote, saveQuestionnaire, approveVideo, requestRevision } from '../../api';
 import LoadingSpinner from '../../components/LoadingSpinner';
 
 const MONTHS_NL = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
@@ -224,11 +224,14 @@ function Questionnaire({ clientName, onSubmit }) {
 // ── PORTAL MAIN ───────────────────────────────────────────────
 export default function PortalClientView() {
   const { user, logout } = useAuth();
-  const { t } = useLang();
+  const { t, lang, setLang } = useLang();
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [note, setNote] = useState('');
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
   const [selectedArchiveWorkspaceId, setSelectedArchiveWorkspaceId] = useState(null);
+  const [processingVideoId, setProcessingVideoId] = useState(null);
+  const [revisionModalVideo, setRevisionModalVideo] = useState(null);
+  const [revisionModalNote, setRevisionModalNote] = useState('');
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -237,6 +240,35 @@ export default function PortalClientView() {
     refetchInterval: showQuestionnaire ? false : 8000,
   });
   const noteMut     = useMutation({ mutationFn: sendClientNote, onSuccess: ()=>{ setNote(''); qc.invalidateQueries({ queryKey: ['portalMe'] }); }});
+  const approveMut = useMutation({
+    mutationFn: approveVideo,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['portalMe'] });
+    },
+    onSettled: () => {
+      setProcessingVideoId(null);
+    },
+  });
+  const revisionMut = useMutation({
+    mutationFn: ({ videoId, note: revisionNote }) => requestRevision(videoId, revisionNote),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['portalMe'] });
+    },
+    onSettled: () => {
+      setProcessingVideoId(null);
+    },
+  });
+
+  const openRevisionModal = (video) => {
+    setRevisionModalVideo(video);
+    setRevisionModalNote('');
+  };
+
+  const closeRevisionModal = () => {
+    if (revisionMut.isPending) return;
+    setRevisionModalVideo(null);
+    setRevisionModalNote('');
+  };
 
   useEffect(() => {
     const prevHtmlOverflow = document.documentElement.style.overflow;
@@ -276,7 +308,27 @@ export default function PortalClientView() {
   if (isLoading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg)'}}><div style={{fontFamily:'Montserrat',fontSize:'24px',fontWeight:'600',color:'var(--accent)'}}>4REEL</div></div>;
 
   if (showQuestionnaire) {
-    return <Questionnaire clientName={data?.client?.name} onSubmit={()=>{ setShowQuestionnaire(false); qc.invalidateQueries({ queryKey: ['portalMe'] }); }} />;
+    return (
+      <>
+        <div className="floating-lang-toggle" role="group" aria-label="Language selector">
+          <button
+            type="button"
+            className={`floating-lang-btn${lang === 'nl' ? ' active' : ''}`}
+            onClick={() => setLang('nl')}
+          >
+            NL
+          </button>
+          <button
+            type="button"
+            className={`floating-lang-btn${lang === 'en' ? ' active' : ''}`}
+            onClick={() => setLang('en')}
+          >
+            EN
+          </button>
+        </div>
+        <Questionnaire clientName={data?.client?.name} onSubmit={()=>{ setShowQuestionnaire(false); qc.invalidateQueries({ queryKey: ['portalMe'] }); }} />
+      </>
+    );
   }
 
   const { client={}, notes=[], reviewVideos=[], deliveredBatches=[], workspaceArchive=[], retainer } = data||{};
@@ -295,6 +347,22 @@ export default function PortalClientView() {
         <div className="portal-header-client">
           <div className="portal-header-avatar" style={{background:client.color||'var(--accent)'}}>{initials}</div>
           <span className="portal-header-client-name">{client.name}</span>
+          <div className="floating-lang-toggle portal-lang-toggle" role="group" aria-label="Language selector">
+            <button
+              type="button"
+              className={`floating-lang-btn${lang === 'nl' ? ' active' : ''}`}
+              onClick={() => setLang('nl')}
+            >
+              NL
+            </button>
+            <button
+              type="button"
+              className={`floating-lang-btn${lang === 'en' ? ' active' : ''}`}
+              onClick={() => setLang('en')}
+            >
+              EN
+            </button>
+          </div>
           {!data?.questionnaire?.submitted && (
             <button onClick={()=>setShowQuestionnaire(true)}
               style={{background:'var(--accent)',color:'white',border:'none',borderRadius:'7px',padding:'6px 12px',fontSize:'12px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit'}}>
@@ -356,7 +424,7 @@ export default function PortalClientView() {
           <div className="section-body">
             {reviewVideos.length > 0 && (
               <div style={{marginBottom:'12px',fontSize:'12px',color:'var(--text-2)',padding:'10px 12px',background:'var(--bg-alt)',border:'1px solid var(--border)',borderRadius:'8px'}}>
-                Laat feedback achter in Frame.io. Zodra je daar goedkeurt of revisie aanvraagt, werken we de status hier automatisch bij.
+                Laat feedback achter in Frame.io. Klik daarna hier op goedkeuren of revisie aanvragen om de status in de workspace direct bij te werken.
               </div>
             )}
             {reviewVideos.length === 0
@@ -376,12 +444,35 @@ export default function PortalClientView() {
                         {v.revision ? '✏️ Revisie gevraagd' : '⏳ Wacht op beoordeling'}
                       </span>
                     </div>
-                    <div className="video-actions">
+                    <div className="video-actions" style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
                       {v.frameUrl ? (
                         <a className="btn-watch" href={v.frameUrl} target="_blank" rel="noopener">▶ Geef feedback in Frame.io</a>
                       ) : (
                         <span style={{fontSize:'11px',color:'var(--text-3)',fontStyle:'italic'}}>Frame.io link ontbreekt</span>
                       )}
+                      <button
+                        type="button"
+                        className="btn-watch"
+                        onClick={() => {
+                          setProcessingVideoId(v._id);
+                          approveMut.mutate(v._id);
+                        }}
+                        disabled={processingVideoId === v._id}
+                        style={{opacity: processingVideoId === v._id ? 0.6 : 1}}
+                      >
+                        {processingVideoId === v._id && approveMut.isPending ? 'Bezig...' : '✅ Goedkeuren'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-watch"
+                        onClick={() => {
+                          openRevisionModal(v);
+                        }}
+                        disabled={processingVideoId === v._id}
+                        style={{opacity: processingVideoId === v._id ? 0.6 : 1}}
+                      >
+                        {processingVideoId === v._id && revisionMut.isPending ? 'Bezig...' : '✏️ Revisie aanvragen'}
+                      </button>
                     </div>
                   </div>
                 ))
@@ -583,6 +674,58 @@ export default function PortalClientView() {
                 }}
               >
                 {t('logout')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {revisionModalVideo && (
+        <div className="modal-overlay open" onClick={closeRevisionModal}>
+          <div className="modal" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">Revisie aanvragen</div>
+              <button type="button" className="modal-close" onClick={closeRevisionModal} disabled={revisionMut.isPending}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: '14px', color: 'var(--text-2)', marginTop: 0, marginBottom: '10px', lineHeight: 1.5 }}>
+                Voeg eventueel een korte notitie toe. Geef de inhoudelijke feedback in Frame.io.
+              </p>
+              <textarea
+                value={revisionModalNote}
+                onChange={(e) => setRevisionModalNote(e.target.value)}
+                rows={4}
+                placeholder="Optionele notitie..."
+                style={{ width: '100%', border: '1px solid var(--border)', borderRadius: '10px', padding: '10px 12px', fontFamily: 'inherit', fontSize: '14px', resize: 'vertical', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-ghost" onClick={closeRevisionModal} disabled={revisionMut.isPending}>
+                Annuleren
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setProcessingVideoId(revisionModalVideo._id);
+                  revisionMut.mutate(
+                    { videoId: revisionModalVideo._id, note: revisionModalNote },
+                    { onSuccess: closeRevisionModal },
+                  );
+                }}
+                disabled={revisionMut.isPending}
+                style={revisionMut.isPending ? { display: 'inline-flex', alignItems: 'center', gap: '8px' } : undefined}
+              >
+                {revisionMut.isPending ? (
+                  <>
+                    <LoadingSpinner size={16} />
+                    <span>Verwerken...</span>
+                  </>
+                ) : (
+                  'Revisie aanvragen'
+                )}
               </button>
             </div>
           </div>

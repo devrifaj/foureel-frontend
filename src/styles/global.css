@@ -122,6 +122,44 @@ ul {
   width: 100%;
 }
 
+.floating-lang-toggle {
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(35, 20, 14, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9px;
+  padding: 3px;
+  z-index: 1001;
+  backdrop-filter: blur(4px);
+}
+
+.floating-lang-btn {
+  min-width: 34px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(250, 247, 242, 0.72);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.floating-lang-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.floating-lang-btn:hover:not(.active) {
+  color: #fff;
+}
+
 .login-box {
   background: var(--card);
   border-radius: 20px;
@@ -7147,6 +7185,14 @@ button.day-event-item {
   gap: 14px;
   font-size: 13px;
   color: rgba(250, 247, 242, 0.86);
+}
+
+.portal-lang-toggle {
+  position: static;
+  top: auto;
+  right: auto;
+  z-index: auto;
+  margin-left: 2px;
 }
 
 .portal-header-client-name {

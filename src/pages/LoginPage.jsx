@@ -61,7 +61,7 @@ function FeedbackBanner({ feedback }) {
 }
 
 export default function LoginPage() {
-  const { t } = useLang();
+  const { t, lang, setLang } = useLang();
   const { establishSession, logout } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -280,6 +280,22 @@ export default function LoginPage() {
 
   return (
     <div className="login-screen" id="login-screen">
+      <div className="floating-lang-toggle" role="group" aria-label="Language selector">
+        <button
+          type="button"
+          className={`floating-lang-btn${lang === "nl" ? " active" : ""}`}
+          onClick={() => setLang("nl")}
+        >
+          NL
+        </button>
+        <button
+          type="button"
+          className={`floating-lang-btn${lang === "en" ? " active" : ""}`}
+          onClick={() => setLang("en")}
+        >
+          EN
+        </button>
+      </div>
       <div className="login-box">
         <div className="login-logo">4R</div>
 
