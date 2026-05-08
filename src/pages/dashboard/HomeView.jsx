@@ -67,6 +67,7 @@ function getWorkspaceDayItems(workspaces, ds) {
         kind: 'workspace',
         title: workspace.name || 'Workspace',
         meta: workspace.client || workspace.editor || '',
+        shootTime: workspace.shootTime || '',
         perspectiveLabel: 'Shoot date',
       });
     }
@@ -191,6 +192,9 @@ function WeekGrid({ start, events, tasks, workspaces, onDayClick, isTeam, locale
                       </span>
                       <span className="event-chip-time">
                         {item.perspectiveLabel}
+                        {item.kind === 'workspace' && item.perspectiveLabel === 'Shoot date' && item.shootTime
+                          ? ` · ${item.shootTime}`
+                          : ''}
                         {item.meta ? ` · ${item.meta}` : ''}
                       </span>
                     </span>
