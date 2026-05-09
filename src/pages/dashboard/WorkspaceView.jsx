@@ -183,6 +183,9 @@ export default function WorkspaceView() {
   const [sopDraft, setSopDraft] = useState(null);
   const [pendingDeleteBatch, setPendingDeleteBatch] = useState(null);
   const [pendingDeleteSubBatch, setPendingDeleteSubBatch] = useState(null);
+  const [portalInfoModalOpen, setPortalInfoModalOpen] = useState(false);
+  const [pendingDeleteVideo, setPendingDeleteVideo] = useState(null);
+  const [isDeletingVideo, setIsDeletingVideo] = useState(false);
   const [newVideoName, setNewVideoName] = useState("");
   const [newLink, setNewLink] = useState({ label: "", url: "" });
   const [resTab, setResTab] = useState("scripts");
@@ -1038,6 +1041,98 @@ export default function WorkspaceView() {
             }}
           >
             {t("wsDeleteBatchBtn")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const portalInfoOverlay = portalInfoModalOpen && (
+    <div
+      className="modal-overlay open"
+      onMouseDown={() => setPortalInfoModalOpen(false)}
+    >
+      <div
+        className="modal"
+        style={{ maxWidth: "460px" }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <div className="modal-title">{t("wsToPortal")}</div>
+          <button
+            className="modal-close"
+            onClick={() => setPortalInfoModalOpen(false)}
+            aria-label={t("close")}
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ padding: "4px 2px 8px", color: "var(--text-2)" }}>
+          {t("wsApproveInternFirst")}
+        </div>
+        <div className="modal-footer">
+          <button
+            className="btn btn-primary"
+            onClick={() => setPortalInfoModalOpen(false)}
+          >
+            {t("close")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const deleteVideoOverlay = pendingDeleteVideo && (
+    <div
+      className="modal-overlay open"
+      onMouseDown={() => {
+        if (!isDeletingVideo) setPendingDeleteVideo(null);
+      }}
+    >
+      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">{t("wsDeleteVideoAria")}</div>
+          <button
+            className="modal-close"
+            onClick={() => setPendingDeleteVideo(null)}
+            disabled={isDeletingVideo}
+            aria-label={t("close")}
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ padding: "4px 2px 8px", color: "var(--text-2)" }}>
+          {t("wsConfirmDeleteVideo")}
+        </div>
+        <div className="modal-footer">
+          <button
+            className="btn btn-ghost"
+            onClick={() => setPendingDeleteVideo(null)}
+            disabled={isDeletingVideo}
+          >
+            {t("cancel")}
+          </button>
+          <button
+            className="btn btn-primary"
+            style={{ background: "#c04040", borderColor: "#c04040" }}
+            disabled={isDeletingVideo}
+            onClick={async () => {
+              if (!pendingDeleteVideo) return;
+              setIsDeletingVideo(true);
+              try {
+                await deleteWorkspaceVideo(
+                  pendingDeleteVideo.wsId,
+                  pendingDeleteVideo.subBId,
+                  pendingDeleteVideo.vId,
+                );
+                setPendingDeleteVideo(null);
+                qc.invalidateQueries({ queryKey: ["workspaces"] });
+              } finally {
+                setIsDeletingVideo(false);
+              }
+            }}
+          >
+            {t("wsDeleteVideoAria")}
           </button>
         </div>
       </div>
@@ -2309,7 +2404,7 @@ export default function WorkspaceView() {
                                 }
                                 onClick={() => {
                                   if (v.editFase !== "intern_approved") {
-                                    window.alert(t("wsApproveInternFirst"));
+                                    setPortalInfoModalOpen(true);
                                     return;
                                   }
                                   updateMut.mutate({
@@ -2329,15 +2424,12 @@ export default function WorkspaceView() {
                               type="button"
                               className="ws-video-delete-btn"
                               aria-label={t("wsDeleteVideoAria")}
-                              onClick={async () => {
-                                if (window.confirm(t("wsConfirmDeleteVideo"))) {
-                                  await deleteWorkspaceVideo(
-                                    batch._id,
-                                    sb._id,
-                                    v._id,
-                                  );
-                                  qc.invalidateQueries({ queryKey: ["workspaces"] });
-                                }
+                              onClick={() => {
+                                setPendingDeleteVideo({
+                                  wsId: batch._id,
+                                  subBId: sb._id,
+                                  vId: v._id,
+                                });
                               }}
                             >
                               ✕
@@ -2493,6 +2585,8 @@ export default function WorkspaceView() {
         {batchCreateOverlay}
         {subBatchCreateOverlay}
         {subBatchDeleteOverlay}
+        {portalInfoOverlay}
+        {deleteVideoOverlay}
       </>
     );
   }
@@ -2850,6 +2944,8 @@ export default function WorkspaceView() {
       {batchCreateOverlay}
       {subBatchCreateOverlay}
       {subBatchDeleteOverlay}
+      {portalInfoOverlay}
+      {deleteVideoOverlay}
     </>
   );
 }
