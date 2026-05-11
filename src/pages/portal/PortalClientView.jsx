@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useLang } from '../../context/LangContext';
@@ -6,10 +6,48 @@ import { getPortalMe, sendClientNote, saveQuestionnaire, approveVideo, requestRe
 import LoadingSpinner from '../../components/LoadingSpinner';
 
 const MONTHS_NL = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
-function fmtDate(ds) {
-  if(!ds) return '—';
-  try { const p=ds.split('-'); return `${parseInt(p[2])} ${MONTHS_NL[parseInt(p[1])-1]} ${p[0]}`; }
-  catch(e){ return ds; }
+function fmtDate(ds, lang) {
+  if (!ds) return '—';
+  const str = String(ds).trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+  if (m) {
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10) - 1;
+    const d = parseInt(m[3], 10);
+    const dt = new Date(y, mo, d);
+    if (!Number.isNaN(dt.getTime())) {
+      if (lang === 'en')
+        return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `${d} ${MONTHS_NL[mo]} ${y}`;
+    }
+  }
+  try {
+    const dt = new Date(str);
+    if (!Number.isNaN(dt.getTime()))
+      return dt.toLocaleDateString(lang === 'en' ? 'en-US' : 'nl-NL', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+  } catch (e) { /* noop */ }
+  return str;
+}
+
+function workspaceStageTKey(stage) {
+  const map = {
+    development: 'wsStage_development',
+    preproduction: 'wsStage_preproduction',
+    shooting: 'wsStage_shooting',
+    'post-production': 'wsStage_postproduction',
+    completed: 'wsStage_completed',
+  };
+  return map[stage] || 'wsStage_preproduction';
+}
+
+function portalShootBadgeLabel(status, t) {
+  if (status === "wrapped") return t("portalShootBadgeWrapped");
+  if (status === "soon") return t("portalShootBadgeSoon");
+  return t("portalShootBadgePlanned");
 }
 
 // ── QUESTIONNAIRE ─────────────────────────────────────────────
@@ -54,6 +92,47 @@ const Q_TOPICS = [
   ]},
 ];
 
+const Q_TOPICS_EN = [
+  { num: 1, title: "Company introduction", fields: [
+    { key: "intro_beschrijving", label: "Describe your company in one clear paragraph", type: "textarea", ph: "Our vision is…" },
+    { key: "intro_diensten", label: "What are your services / products?", type: "textarea", ph: "We sell / deliver…" },
+    { key: "intro_usps", label: "What are your USPs compared to competitors?", type: "textarea", ph: "We stand out because…" },
+    { key: "intro_positionering", label: "Positioning", type: "radio", options: ["Premium", "Mid-range", "Budget"] },
+  ]},
+  { num: 2, title: "Audience analysis", fields: [
+    { key: "dg_resultaten", label: "What outcomes do your customers want to achieve?", type: "textarea", ph: "Our customers want to…" },
+    { key: "dg_frustraties", label: "What are the biggest frustrations of your ideal customer?", type: "textarea", ph: "Before they came to us they had…" },
+    { key: "dg_minder_focus", label: "Which type of customers do you want to focus on less?", type: "textarea", ph: "We want to focus less on…" },
+    { key: "dg_ideaal", label: "Who is your ideal audience?", type: "textarea", ph: "Our ideal customer is…", hint: "Age, interests, location, behaviour" },
+    { key: "dg_doel", label: "What is the main goal with these videos?", type: "textarea", ph: "e.g. reach, authority, product sales…" },
+  ]},
+  { num: 3, title: "Content strategy", fields: [
+    { key: "cs_strategie", label: "Do you already have a content strategy?", type: "radio", options: ["No", "Partially", "We're not sure", "Other:"] },
+    { key: "cs_onderwerpen", label: "Which topics should definitely appear?", type: "textarea", ph: "e.g. workouts, nutrition, community…" },
+    { key: "cs_boodschap", label: "What is the core message you want to convey?", type: "textarea", ph: "e.g. inspire, inform, entertain or persuade…" },
+    { key: "cs_inspiratie", label: "Do you have existing content or inspiration accounts?", type: "textarea", ph: "e.g. https://instagram.com/…", hint: "Add links if you like" },
+    { key: "cs_type", label: "What type of content are you thinking of?", type: "checkbox", options: ["Organic content (explainer, entertaining, Q&A)", "Product showcase (location/product edit)", "Meta Ads (Instagram / Facebook ads)", "Other:"] },
+    { key: "cs_stijl", label: "What video style do you prefer?", type: "checkbox", options: ["Informal and personal, entertaining (personal brand)", "Hype-led and dynamic (trends, influencer style)", "Professional and informative (explain/product)", "Sales-focused (conversion / Meta ads)", "Other:"] },
+    { key: "cs_transformaties", label: "Do you have customer transformations or success stories?", type: "textarea", ph: "Yes / No — describe if relevant…" },
+    { key: "cs_vermijden", label: "Are there topics we should avoid?", type: "textarea", ph: "e.g. no naming competitors, no politics…" },
+    { key: "cs_ads", label: "Do you plan to run ads at some point?", type: "radio", options: ["No", "Not sure yet", "Yes, in the future", "Yes, and I want to work on that now!"] },
+    { key: "cs_verkopen", label: "Which services / products do you want to sell more of?", type: "textarea", ph: "e.g. personal training, group classes…" },
+    { key: "cs_pijnpunten", label: "What is the main reason trial members don't convert?", type: "textarea", ph: "e.g. price, doubt, no urgency…" },
+  ]},
+  { num: 4, title: "Practical matters", fields: [
+    { key: "pr_opnames", label: "On which days is it best to schedule filming?", type: "textarea", ph: "e.g. Mon–Wed, mornings before 10:00…" },
+    { key: "pr_filmen_ok", label: "Are members / customers OK with filming on location?", type: "radio", options: ["Yes", "No", "Other:"] },
+    { key: "pr_camera", label: "Who is available to appear on camera?", type: "textarea", ph: "Name + role + whether they feel comfortable…" },
+    { key: "pr_start", label: "When are you available to get started?", type: "radio", options: ["As soon as possible", "Within 2 weeks", "Within 1 month", "Other:"] },
+  ]},
+  { num: 5, title: "Closing", fields: [
+    { key: "af_brandbook", label: "Do you have a brand book / visual identity?", type: "radio", options: ["Yes, keep the same style (send to paolo@4reelagency.nl)", "Yes, but it's outdated (send to paolo@4reelagency.nl)", "No, we'll leave it to you"] },
+    { key: "af_meta", label: "Do you have an active Meta (Facebook) ad account?", type: "radio", options: ["Yes (send access to info@4reelagency.nl)", "Yes, but the current one doesn't work yet", "No, still needs to be created"] },
+    { key: "af_email", label: "Which email address can we use to contact you?", type: "email", ph: "you@email.com" },
+    { key: "af_extra", label: "Any other relevant information?", type: "textarea", ph: "Free text — anything else we should know…" },
+  ]},
+];
+
 const Q_FIELDS = Q_TOPICS.flatMap((topic) => topic.fields);
 const REQUIRED_Q_KEYS = Q_FIELDS.map((field) => field.key);
 
@@ -67,7 +146,8 @@ function getQuestionnaireMissingKeys(answers = {}) {
   return Q_FIELDS.filter((field) => !isQuestionnaireValueFilled(answers[field.key], field.type)).map((field) => field.key);
 }
 
-function Questionnaire({ clientName, onSubmit }) {
+function Questionnaire({ clientName, onSubmit, t, lang }) {
+  const topics = lang === "en" ? Q_TOPICS_EN : Q_TOPICS;
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -89,9 +169,9 @@ function Questionnaire({ clientName, onSubmit }) {
   if (submitted) return (
     <div className="portal-questionnaire-success" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'var(--bg)',padding:'40px'}}>
       <div style={{fontSize:'64px',marginBottom:'20px'}}>🎉</div>
-      <div style={{fontFamily:'Montserrat',fontSize:'28px',fontWeight:'700',marginBottom:'12px'}}>Vragenlijst ontvangen!</div>
-      <div style={{fontSize:'15px',color:'var(--text-3)',textAlign:'center',maxWidth:'440px',marginBottom:'32px',lineHeight:'1.6'}}>Bedankt voor het invullen. Het 4REEL team gaat hiermee aan de slag en neemt snel contact met je op.</div>
-      <button type="button" onClick={onSubmit} style={{background:'var(--accent)',color:'white',border:'none',borderRadius:'10px',padding:'14px 32px',fontFamily:'Montserrat',fontSize:'15px',fontWeight:'700',cursor:'pointer'}}>Naar mijn portaal →</button>
+      <div style={{fontFamily:'Montserrat',fontSize:'28px',fontWeight:'700',marginBottom:'12px'}}>{t('portalQ_successTitle')}</div>
+      <div style={{fontSize:'15px',color:'var(--text-3)',textAlign:'center',maxWidth:'440px',marginBottom:'32px',lineHeight:'1.6'}}>{t('portalQ_successBody')}</div>
+      <button type="button" onClick={onSubmit} style={{background:'var(--accent)',color:'white',border:'none',borderRadius:'10px',padding:'14px 32px',fontFamily:'Montserrat',fontSize:'15px',fontWeight:'700',cursor:'pointer'}}>{t('portalQ_successBtn')}</button>
     </div>
   );
 
@@ -100,7 +180,7 @@ function Questionnaire({ clientName, onSubmit }) {
       {/* Header */}
       <div className="portal-questionnaire-header" style={{background:'var(--sidebar)',padding:'20px 32px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div>
-          <div style={{fontFamily:'Montserrat',fontSize:'20px',fontWeight:'700',color:'white',letterSpacing:'.12em'}}>4REEL — Onboarding</div>
+          <div style={{fontFamily:'Montserrat',fontSize:'20px',fontWeight:'700',color:'white',letterSpacing:'.12em'}}>{t('portalQ_headerBrand')}</div>
           <div style={{fontSize:'12px',color:'rgba(255,255,255,.5)',marginTop:'2px'}}>{clientName}</div>
         </div>
         <div className="portal-questionnaire-progress" style={{textAlign:'right'}}>
@@ -116,12 +196,12 @@ function Questionnaire({ clientName, onSubmit }) {
         <div className="portal-questionnaire-banner" style={{background:'linear-gradient(135deg,var(--accent),#E07830)',borderRadius:'14px',padding:'20px 24px',marginBottom:'28px',display:'flex',gap:'16px',alignItems:'center'}}>
           <div style={{fontSize:'28px',flexShrink:0}}>👋</div>
           <div>
-            <div style={{fontFamily:'Montserrat',fontSize:'15px',fontWeight:'700',color:'white',marginBottom:'3px'}}>Welkom bij 4REEL! Vul de onboarding in</div>
-            <div style={{fontSize:'12px',color:'rgba(255,255,255,.8)'}}>We hebben een paar vragen nodig om jouw contentstrategie perfect af te stemmen. Duurt ca. 10-15 minuten. Alles wordt automatisch opgeslagen.</div>
+            <div style={{fontFamily:'Montserrat',fontSize:'15px',fontWeight:'700',color:'white',marginBottom:'3px'}}>{t('portalQ_bannerTitle')}</div>
+            <div style={{fontSize:'12px',color:'rgba(255,255,255,.8)'}}>{t('portalQ_bannerBody')}</div>
           </div>
         </div>
 
-        {Q_TOPICS.map(topic => (
+        {topics.map(topic => (
           <div key={topic.num} style={{background:'var(--card)',borderRadius:'16px',boxShadow:'0 2px 16px rgba(28,20,16,.07)',marginBottom:'28px',overflow:'hidden'}}>
             <div className="portal-questionnaire-topic-head" style={{background:'var(--sidebar)',padding:'20px 28px',display:'flex',alignItems:'center',gap:'14px'}}>
               <div style={{width:'36px',height:'36px',borderRadius:'50%',background:'var(--accent)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'Montserrat',fontSize:'16px',fontWeight:'700',color:'white',flexShrink:0}}>{topic.num}</div>
@@ -181,7 +261,7 @@ function Questionnaire({ clientName, onSubmit }) {
                   )}
                   {isInvalid && (
                     <div style={{marginTop:'7px',fontSize:'12px',color:'#B94A48',fontWeight:'600'}}>
-                      Dit veld is verplicht.
+                      {t('portalQ_fieldRequired')}
                     </div>
                   )}
                 </div>
@@ -194,11 +274,11 @@ function Questionnaire({ clientName, onSubmit }) {
 
       {/* Footer */}
       <div className="portal-questionnaire-footer" style={{position:'fixed',bottom:0,left:0,right:0,background:'white',borderTop:'2px solid var(--border)',padding:'16px 32px',display:'flex',alignItems:'center',justifyContent:'space-between',zIndex:100,boxShadow:'0 -4px 20px rgba(28,20,16,.08)'}}>
-        <div style={{fontSize:'12px',color:'var(--sage)',fontWeight:'600'}}>✓ Automatisch opgeslagen</div>
+        <div style={{fontSize:'12px',color:'var(--sage)',fontWeight:'600'}}>{t('portalQ_footerSaved')}</div>
         <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'8px'}}>
           {!canSubmit && submitAttempted && (
             <div style={{fontSize:'12px',color:'#B94A48',fontWeight:'600'}}>
-              Vul alle velden in ({remainingCount} ontbrekend{remainingCount===1?'':'e'} antwoord{remainingCount===1?'':'en'}).
+              {t('portalQ_footerIncomplete', { n: remainingCount })}
             </div>
           )}
           <button
@@ -213,7 +293,7 @@ function Questionnaire({ clientName, onSubmit }) {
             disabled={saveMut.isPending || !canSubmit}
             style={{background:(saveMut.isPending || !canSubmit)?'var(--border)':'var(--accent)',color:'white',border:'none',borderRadius:'10px',padding:'14px 32px',fontFamily:'Montserrat',fontSize:'15px',fontWeight:'700',cursor:(saveMut.isPending || !canSubmit)?'not-allowed':'pointer',display:'inline-flex',alignItems:'center',gap:'8px'}}>
             {saveMut.isPending ? <LoadingSpinner size={18} /> : null}
-            <span>Vragenlijst versturen →</span>
+            <span>{t('portalQ_submit')}</span>
           </button>
         </div>
       </div>
@@ -297,7 +377,7 @@ export default function PortalClientView() {
       setSelectedArchiveWorkspaceId(null);
       return;
     }
-    const hasCurrentSelection = data.workspaceArchive.some(
+    const hasCurrentSelection = (data?.workspaceArchive ?? []).some(
       (workspace) => workspace._id === selectedArchiveWorkspaceId,
     );
     if (!hasCurrentSelection) {
@@ -305,12 +385,24 @@ export default function PortalClientView() {
     }
   }, [data?.workspaceArchive, selectedArchiveWorkspaceId]);
 
-  if (isLoading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg)'}}><div style={{fontFamily:'Montserrat',fontSize:'24px',fontWeight:'600',color:'var(--accent)'}}>4REEL</div></div>;
+  const reviewVideosGrouped = useMemo(() => {
+    const OTHER = "__other__";
+    const list = data?.reviewVideos ?? [];
+    const m = new Map();
+    for (const v of list) {
+      const key = v.workspaceName || v.batchName || OTHER;
+      if (!m.has(key)) m.set(key, []);
+      m.get(key).push(v);
+    }
+    return Array.from(m.entries());
+  }, [data?.reviewVideos]);
+
+  if (isLoading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg)'}}><div style={{fontFamily:'Montserrat',fontSize:'24px',fontWeight:'600',color:'var(--accent)'}}>{t('portalLoadingBrand')}</div></div>;
 
   if (showQuestionnaire) {
     return (
       <>
-        <div className="floating-lang-toggle" role="group" aria-label="Language selector">
+        <div className="floating-lang-toggle" role="group" aria-label={t('portalQLangAria')}>
           <button
             type="button"
             className={`floating-lang-btn${lang === 'nl' ? ' active' : ''}`}
@@ -326,28 +418,29 @@ export default function PortalClientView() {
             EN
           </button>
         </div>
-        <Questionnaire clientName={data?.client?.name} onSubmit={()=>{ setShowQuestionnaire(false); qc.invalidateQueries({ queryKey: ['portalMe'] }); }} />
+        <Questionnaire clientName={data?.client?.name} onSubmit={()=>{ setShowQuestionnaire(false); qc.invalidateQueries({ queryKey: ['portalMe'] }); }} t={t} lang={lang} />
       </>
     );
   }
 
-  const { client={}, notes=[], reviewVideos=[], deliveredBatches=[], workspaceArchive=[], retainer } = data||{};
+  const { client={}, notes=[], workspaceCurrent=[], workspaceArchive=[], nextShoot=null, retainer } = data||{};
+  const reviewVideos = data?.reviewVideos ?? [];
   const initials = (client.name||'').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-  const deliveredCount = deliveredBatches.reduce((sum, batch) => sum + (batch.videos?.length || 0), 0);
   const selectedArchiveWorkspace =
     workspaceArchive.find((workspace) => workspace._id === selectedArchiveWorkspaceId) ||
     workspaceArchive[0] ||
     null;
+  const shoot = nextShoot;
 
   return (
     <div style={{minHeight:'100vh',background:'var(--bg)'}}>
       {/* Header */}
       <header className="portal-header">
-        <div className="portal-header-logo"><span>4REEL</span> Portaal</div>
+        <div className="portal-header-logo"><span>4REEL</span> {t('portalHeaderAfterBrand')}</div>
         <div className="portal-header-client">
           <div className="portal-header-avatar" style={{background:client.color||'var(--accent)'}}>{initials}</div>
           <span className="portal-header-client-name">{client.name}</span>
-          <div className="floating-lang-toggle portal-lang-toggle" role="group" aria-label="Language selector">
+          <div className="floating-lang-toggle portal-lang-toggle" role="group" aria-label={t('portalQLangAria')}>
             <button
               type="button"
               className={`floating-lang-btn${lang === 'nl' ? ' active' : ''}`}
@@ -364,9 +457,9 @@ export default function PortalClientView() {
             </button>
           </div>
           {!data?.questionnaire?.submitted && (
-            <button onClick={()=>setShowQuestionnaire(true)}
+            <button type="button" onClick={()=>setShowQuestionnaire(true)}
               style={{background:'var(--accent)',color:'white',border:'none',borderRadius:'7px',padding:'6px 12px',fontSize:'12px',fontWeight:'700',cursor:'pointer',fontFamily:'inherit'}}>
-              📋 Vragenlijst invullen
+              {t('portalQuestionnaireBtn')}
             </button>
           )}
           <button type="button" className="portal-logout" onClick={() => setLogoutModalOpen(true)}>
@@ -380,35 +473,30 @@ export default function PortalClientView() {
         <div className="welcome-card">
           <div className="welcome-emoji">👋</div>
           <div className="welcome-text">
-            <h2>Welkom, {client.name?.split(' ')[0]}!</h2>
-            <p>{client.welcomeMessage||'Hier vind je alles over je project bij 4REEL.'}</p>
+            <h2>{t('portalWelcomeHi', { name: client.name?.split(' ')[0] || '—' })}</h2>
+            <p>{client.welcomeMessage || t('portalWelcomeDefaultSub')}</p>
           </div>
         </div>
 
         {/* Shoot info */}
         <div className="portal-section">
           <div className="section-header">
-            <div className="section-title">📅 Volgende shoot</div>
-            {!!client.shoot && (
-              <div><span className={`shoot-badge badge-${client.shoot.status||'planned'}`}>{client.shoot.status==='wrapped'?'Afgerond':client.shoot.status==='soon'?'Bijna!':'Gepland'}</span></div>
+            <div className="section-title">{t('portalNextShootTitle')}</div>
+            {!!shoot && (
+              <div><span className={`shoot-badge badge-${shoot.status||'planned'}`}>{portalShootBadgeLabel(shoot.status, t)}</span></div>
             )}
           </div>
           <div className="section-body">
-            {!client.shoot ? (
-              <div className="empty-state"><div className="emoji">📷</div><p>Nog geen shoot gepland. Je hoort snel van ons!</p></div>
+            {!shoot ? (
+              <div className="empty-state"><div className="emoji">📷</div><p>{t('portalShootEmpty')}</p></div>
             ) : (
               <div className="shoot-info">
                 <div>
-                  <div className="shoot-name">{client.shoot.name}</div>
-                  {client.shoot.date && <div className="shoot-detail"><span className="shoot-detail-icon">📅</span><strong>Datum:</strong>&nbsp;{fmtDate(client.shoot.date)}</div>}
-                  {client.shoot.location && <div className="shoot-detail"><span className="shoot-detail-icon">📍</span><strong>Locatie:</strong>&nbsp;{client.shoot.location}</div>}
-                  {client.shoot.info && <div className="shoot-detail"><span className="shoot-detail-icon">ℹ️</span><span>{client.shoot.info}</span></div>}
-                </div>
-                <div className="deliverables-box">
-                  <div className="deliverables-title">Deliverables</div>
-                  <div className="deliverable-item">📹 Brand video</div>
-                  <div className="deliverable-item">📲 Social cuts (9:16)</div>
-                  <div className="deliverable-item">✂️ Behind the scenes</div>
+                  <div className="shoot-name">{shoot.name}</div>
+                  {shoot.date && <div className="shoot-detail"><span className="shoot-detail-icon">📅</span><strong>{t('portalShootDateLabel')}</strong>&nbsp;{fmtDate(shoot.date, lang)}</div>}
+                  {shoot.shootTime && <div className="shoot-detail"><span className="shoot-detail-icon">🕐</span><strong>{t('portalShootTimeLabel')}</strong>&nbsp;{shoot.shootTime}</div>}
+                  {shoot.location && <div className="shoot-detail"><span className="shoot-detail-icon">📍</span><strong>{t('portalShootLocationLabel')}</strong>&nbsp;{shoot.location}</div>}
+                  {shoot.info && <div className="shoot-detail"><span className="shoot-detail-icon">ℹ️</span><span>{shoot.info}</span></div>}
                 </div>
               </div>
             )}
@@ -418,37 +506,46 @@ export default function PortalClientView() {
         {/* Videos for review */}
         <div className="portal-section" id="section-review">
           <div className="section-header">
-            <div className="section-title">🎬 Video's ter beoordeling</div>
-            {reviewVideos.length > 0 && <div style={{fontSize:'12px',color:'var(--text-3)'}}>{reviewVideos.length} wacht{reviewVideos.length===1?'':'en'} op beoordeling</div>}
+            <div className="section-title">{t('portalReviewTitle')}</div>
+            {reviewVideos.length > 0 && (
+              <div style={{fontSize:'12px',color:'var(--text-3)'}}>
+                {reviewVideos.length === 1 ? t('portalReviewWaitingOne') : t('portalReviewWaitingMany', { n: reviewVideos.length })}
+              </div>
+            )}
           </div>
           <div className="section-body">
             {reviewVideos.length > 0 && (
               <div style={{marginBottom:'12px',fontSize:'12px',color:'var(--text-2)',padding:'10px 12px',background:'var(--bg-alt)',border:'1px solid var(--border)',borderRadius:'8px'}}>
-                Laat feedback achter in Frame.io. Klik daarna hier op goedkeuren of revisie aanvragen om de status in de workspace direct bij te werken.
+                {t('portalReviewHint')}
               </div>
             )}
             {reviewVideos.length === 0
-              ? <div className="empty-state"><div className="emoji">✂️</div><p>Geen video's meer ter beoordeling. Kijk bij Opgeleverd voor de downloads!</p></div>
-              : reviewVideos.map(v => (
+              ? <div className="empty-state"><div className="emoji">✂️</div><p>{t('portalReviewEmpty')}</p></div>
+              : reviewVideosGrouped.map(([groupKey, videos]) => {
+                  const label = groupKey === '__other__' ? t('portalReviewGroupOther') : groupKey;
+                  return (
+                    <div key={groupKey} style={{ marginBottom: '22px' }}>
+                      <div style={{ fontFamily: 'Montserrat', fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--text)', letterSpacing: '.02em' }}>{label}</div>
+                      {videos.map((v) => (
                   <div key={v._id} className={`video-card${v.revision?' revision':''}`}>
                     <div className="video-card-top">
                       <div style={{flex:1}}>
                         <div className="video-name">📄 {v.name}</div>
                         {v.revisionNote && (
                           <div style={{marginTop:'8px',fontSize:'12px',color:'var(--text-2)',padding:'9px 12px',background:'rgba(212,168,75,.12)',borderRadius:'7px',borderLeft:'3px solid var(--amber)'}}>
-                            <strong>Jouw revisienoot:</strong> {v.revisionNote}
+                            <strong>{t('portalReviewRevisionLabel')}</strong> {v.revisionNote}
                           </div>
                         )}
                       </div>
                       <span className="video-status" style={{color:v.revision?'var(--amber)':'var(--text-3)'}}>
-                        {v.revision ? '✏️ Revisie gevraagd' : '⏳ Wacht op beoordeling'}
+                        {v.revision ? t('portalReviewStatusRevision') : t('portalReviewStatusWaiting')}
                       </span>
                     </div>
                     <div className="video-actions" style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
                       {v.frameUrl ? (
-                        <a className="btn-watch" href={v.frameUrl} target="_blank" rel="noopener">▶ Geef feedback in Frame.io</a>
+                        <a className="btn-watch" href={v.frameUrl} target="_blank" rel="noopener noreferrer">{t('portalReviewFrameBtn')}</a>
                       ) : (
-                        <span style={{fontSize:'11px',color:'var(--text-3)',fontStyle:'italic'}}>Frame.io link ontbreekt</span>
+                        <span style={{fontSize:'11px',color:'var(--text-3)',fontStyle:'italic'}}>{t('portalReviewFrameMissing')}</span>
                       )}
                       <button
                         type="button"
@@ -460,7 +557,7 @@ export default function PortalClientView() {
                         disabled={processingVideoId === v._id}
                         style={{opacity: processingVideoId === v._id ? 0.6 : 1}}
                       >
-                        {processingVideoId === v._id && approveMut.isPending ? 'Bezig...' : '✅ Goedkeuren'}
+                        {processingVideoId === v._id && approveMut.isPending ? t('portalReviewBusy') : t('portalReviewApprove')}
                       </button>
                       <button
                         type="button"
@@ -471,59 +568,68 @@ export default function PortalClientView() {
                         disabled={processingVideoId === v._id}
                         style={{opacity: processingVideoId === v._id ? 0.6 : 1}}
                       >
-                        {processingVideoId === v._id && revisionMut.isPending ? 'Bezig...' : '✏️ Revisie aanvragen'}
+                        {processingVideoId === v._id && revisionMut.isPending ? t('portalReviewBusy') : t('portalReviewRevise')}
                       </button>
                     </div>
                   </div>
-                ))
-            }
+                      ))}
+                    </div>
+                  );
+                })}
           </div>
         </div>
 
-        {/* Delivered */}
-        <div className="portal-section" id="section-delivered">
+        {/* Current projects */}
+        <div className="portal-section" id="section-current-projects">
           <div className="section-header">
-            <div className="section-title">📦 Opgeleverd & goedgekeurd</div>
-            {deliveredCount > 0 && <div style={{fontSize:'12px',color:'var(--sage)'}}>{deliveredCount} video's</div>}
+            <div className="section-title">{t('portalCurrentProjectsTitle')}</div>
           </div>
           <div className="section-body">
-            {deliveredBatches.length === 0 ? (
-              <div className="empty-state"><div className="emoji">🎉</div><p>Nog niets opgeleverd — maar dat komt eraan!</p></div>
+            {workspaceCurrent.length === 0 ? (
+              <div className="empty-state"><div className="emoji">🎬</div><p>{t('portalCurrentProjectsEmpty')}</p></div>
             ) : (
-              deliveredBatches.map((batch) => (
-                <div key={batch.name} className="delivered-batch">
-                  <div className="delivered-batch-header">
-                    <div className="delivered-batch-name">📦 {batch.name}</div>
-                    <div className="delivered-batch-date">{new Date(batch.date).toLocaleDateString('nl-NL')}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {workspaceCurrent.map((ws) => (
+                  <div
+                    key={ws._id}
+                    style={{
+                      background: 'var(--card)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '12px',
+                      padding: '16px 18px',
+                      boxShadow: '0 2px 12px rgba(28,20,16,.06)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '22px' }}>{ws.emoji || '📁'}</span>
+                      <div style={{ fontFamily: 'Montserrat', fontSize: '16px', fontWeight: 700 }}>{ws.name}</div>
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: 1.6 }}>
+                      <div><strong>{t('portalCurrentProjectsStage')}</strong> {t(workspaceStageTKey(ws.projectStage))}</div>
+                      {ws.shootDate && (
+                        <div><strong>{t('portalCurrentProjectsShoot')}</strong> {fmtDate(ws.shootDate, lang)}{ws.shootTime ? ` · ${ws.shootTime}` : ''}</div>
+                      )}
+                      {ws.deadline && (
+                        <div><strong>{t('portalCurrentProjectsDeadline')}</strong> {fmtDate(ws.deadline, lang)}</div>
+                      )}
+                    </div>
                   </div>
-                  <div className="delivered-video-list">
-                    {(batch.videos || []).map((video) => (
-                      <div key={`${batch.name}-${video.name}`} className="delivered-video-row">
-                        <div className="delivered-video-name">✓ {video.name}</div>
-                        {video.driveUrl ? (
-                          <a className="drive-download-btn" href={video.driveUrl} target="_blank" rel="noopener">Download via Drive</a>
-                        ) : (
-                          <span style={{fontSize:'11px',color:'var(--text-3)',fontStyle:'italic'}}>Drive link binnenkort</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Retainer */}
+        {/* Workspace archive */}
         <div className="portal-section">
           <div className="section-header">
-            <div className="section-title">🗂️ Workspace archief</div>
+            <div className="section-title">{t('portalArchiveTitle')}</div>
           </div>
           <div className="section-body">
             {workspaceArchive.length === 0 ? (
               <div className="empty-state">
                 <div className="emoji">📁</div>
-                <p>Nog geen workspaces beschikbaar in je archief.</p>
+                <p>{t('portalArchiveEmpty')}</p>
               </div>
             ) : (
               <div className="portal-archive-layout">
@@ -543,7 +649,9 @@ export default function PortalClientView() {
                           <span>{workspace.name}</span>
                         </div>
                         <div className="portal-archive-workspace-meta">
-                          {videoCount} video{videoCount === 1 ? '' : "'s"}
+                          {videoCount === 1
+                            ? t('portalArchiveVideoCount', { n: videoCount })
+                            : t('portalArchiveVideoCountPlural', { n: videoCount })}
                         </div>
                       </button>
                     );
@@ -557,28 +665,24 @@ export default function PortalClientView() {
                     selectedArchiveWorkspace.videos.map((video) => (
                       <div key={video._id} className="portal-archive-video-row">
                         <div>
-                          <div className="portal-archive-video-name">{video.name || 'Onbekende video'}</div>
+                          <div className="portal-archive-video-name">{video.name || t('portalArchiveVideoUnknown')}</div>
                           <div className="portal-archive-video-meta">
-                            Batch: {video.batchName || 'Onbekend'}
+                            {t('portalArchiveBatch')} {video.batchName || '—'}
                           </div>
                         </div>
                         <div className="portal-archive-video-actions">
                           {video.frameUrl ? (
-                            <a href={video.frameUrl} target="_blank" rel="noopener">Bekijk op Frame.io</a>
-                          ) : null}
-                          {video.driveUrl ? (
-                            <a href={video.driveUrl} target="_blank" rel="noopener">Download via Drive</a>
-                          ) : null}
-                          {!video.frameUrl && !video.driveUrl ? (
-                            <span>Geen links beschikbaar</span>
-                          ) : null}
+                            <a href={video.frameUrl} target="_blank" rel="noopener noreferrer">{t('portalArchiveViewFrame')}</a>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: 'var(--text-3)' }}>{t('portalArchiveNoLinks')}</span>
+                          )}
                         </div>
                       </div>
                     ))
                   ) : (
                     <div className="empty-state" style={{ marginTop: '10px' }}>
                       <div className="emoji">🎬</div>
-                      <p>Geen video's in deze workspace.</p>
+                      <p>{t('portalArchiveVideosEmpty')}</p>
                     </div>
                   )}
                 </div>
@@ -590,17 +694,17 @@ export default function PortalClientView() {
         {/* Retainer */}
         {retainer && (
           <div className="portal-section">
-            <div className="section-header"><div className="section-title">💼 Mijn pakket</div></div>
+            <div className="section-header"><div className="section-title">{t('portalRetainerTitle')}</div></div>
             <div className="section-body">
               <div style={{display:'flex',alignItems:'center',gap:'12px',padding:'14px 18px',borderRadius:'10px',marginBottom:'16px',background:'var(--sage-light)',border:'1.5px solid var(--sage)'}}>
                 <div style={{flex:1}}>
                   <div style={{fontFamily:'Montserrat',fontSize:'15px',fontWeight:'700'}}>{retainer.pakket}</div>
                   {retainer.prijs && <div style={{fontSize:'13px',color:'var(--text-2)',marginTop:'2px'}}>{retainer.prijs}{retainer.periode?` · ${retainer.periode}`:''}</div>}
                 </div>
-                <span style={{fontSize:'11px',fontWeight:'700',padding:'4px 10px',borderRadius:'20px',background:'var(--sage)',color:'white'}}>Actief</span>
+                <span style={{fontSize:'11px',fontWeight:'700',padding:'4px 10px',borderRadius:'20px',background:'var(--sage)',color:'white'}}>{t('portalRetainerActive')}</span>
               </div>
               <div style={{background:'var(--bg-alt)',borderRadius:'10px',padding:'14px 18px',border:'1.5px solid var(--border)'}}>
-                <div style={{fontSize:'11px',fontWeight:'700',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:'10px'}}>Wat is inbegrepen</div>
+                <div style={{fontSize:'11px',fontWeight:'700',color:'var(--text-3)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:'10px'}}>{t('portalRetainerIncluded')}</div>
                 {retainer.shoots && <div style={{fontSize:'13px',marginBottom:'5px'}}>📷 {retainer.shoots}</div>}
                 {retainer.videos && <div style={{fontSize:'13px',marginBottom:'5px'}}>🎬 {retainer.videos}</div>}
                 {retainer.extras && <div style={{fontSize:'13px'}}>➕ {retainer.extras}</div>}
@@ -611,21 +715,21 @@ export default function PortalClientView() {
 
         {/* Messages */}
         <div className="portal-section">
-          <div className="section-header"><div className="section-title">💬 Berichten & notities</div></div>
+          <div className="section-header"><div className="section-title">{t('portalMessagesTitle')}</div></div>
           <div className="section-body">
             <div className="notes-list">
               {notes.map(n => (
                 <div key={n._id} style={{display:'flex',justifyContent:n.from === 'client' ? 'flex-start' : 'flex-end'}}>
                   <div className={`note-bubble ${n.from === 'client' ? 'client' : 'studio'}`}>
-                    <div className="note-meta">{n.author} · {new Date(n.createdAt).toLocaleDateString('nl-NL')}</div>
+                    <div className="note-meta">{n.author} · {new Date(n.createdAt).toLocaleDateString(lang === 'en' ? 'en-US' : 'nl-NL')}</div>
                     {n.text}
                   </div>
                 </div>
               ))}
-              {notes.length===0 && <div style={{fontSize:'13px',color:'var(--text-3)',fontStyle:'italic',padding:'8px 0'}}>Nog geen berichten</div>}
+              {notes.length===0 && <div style={{fontSize:'13px',color:'var(--text-3)',fontStyle:'italic',padding:'8px 0'}}>{t('portalMessagesEmpty')}</div>}
             </div>
             <div className="note-input-row">
-              <textarea className="note-input" value={note} onChange={e=>setNote(e.target.value)} placeholder="Stel een vraag of laat een notitie achter…" rows={2}
+              <textarea className="note-input" value={note} onChange={e=>setNote(e.target.value)} placeholder={t('portalNotePlaceholder')} rows={2}
                 onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(note.trim())noteMut.mutate(note);}}} />
               <button
                 className="note-send"
@@ -636,10 +740,10 @@ export default function PortalClientView() {
                 {noteMut.isPending ? (
                   <>
                     <LoadingSpinner size={16} />
-                    <span>Stuur</span>
+                    <span>{t('portalSend')}</span>
                   </>
                 ) : (
-                  'Stuur'
+                  t('portalSend')
                 )}
               </button>
             </div>
@@ -684,26 +788,26 @@ export default function PortalClientView() {
         <div className="modal-overlay open" onClick={closeRevisionModal}>
           <div className="modal" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <div className="modal-title">Revisie aanvragen</div>
+              <div className="modal-title">{t('portalRevisionModalTitle')}</div>
               <button type="button" className="modal-close" onClick={closeRevisionModal} disabled={revisionMut.isPending}>
                 ✕
               </button>
             </div>
             <div className="modal-body">
               <p style={{ fontSize: '14px', color: 'var(--text-2)', marginTop: 0, marginBottom: '10px', lineHeight: 1.5 }}>
-                Voeg eventueel een korte notitie toe. Geef de inhoudelijke feedback in Frame.io.
+                {t('portalRevisionModalBody')}
               </p>
               <textarea
                 value={revisionModalNote}
                 onChange={(e) => setRevisionModalNote(e.target.value)}
                 rows={4}
-                placeholder="Optionele notitie..."
+                placeholder={t('portalRevisionPlaceholder')}
                 style={{ width: '100%', border: '1px solid var(--border)', borderRadius: '10px', padding: '10px 12px', fontFamily: 'inherit', fontSize: '14px', resize: 'vertical', boxSizing: 'border-box' }}
               />
             </div>
             <div className="modal-footer">
               <button type="button" className="btn btn-ghost" onClick={closeRevisionModal} disabled={revisionMut.isPending}>
-                Annuleren
+                {t('portalRevisionCancel')}
               </button>
               <button
                 type="button"
@@ -721,10 +825,10 @@ export default function PortalClientView() {
                 {revisionMut.isPending ? (
                   <>
                     <LoadingSpinner size={16} />
-                    <span>Verwerken...</span>
+                    <span>{t('portalRevisionProcessing')}</span>
                   </>
                 ) : (
-                  'Revisie aanvragen'
+                  t('portalRevisionSubmit')
                 )}
               </button>
             </div>

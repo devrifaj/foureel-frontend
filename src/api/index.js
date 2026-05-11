@@ -111,7 +111,13 @@ export const deleteVideo = (batchId, videoId) =>
   req("DELETE", `/batches/${batchId}/videos/${videoId}`);
 
 // Workspaces (new hierarchy: Workspace → Batches → Videos)
-export const getWorkspaces = () => req("GET", "/workspaces");
+export const getWorkspaces = (params = {}) => {
+  const search = new URLSearchParams();
+  if (params.archived === true) search.set("archived", "1");
+  const qs = search.toString();
+  return req("GET", `/workspaces${qs ? `?${qs}` : ""}`);
+};
+export const getWorkspace = (id) => req("GET", `/workspaces/${id}`);
 export const createWorkspace = (data) => req("POST", "/workspaces", data);
 export const updateWorkspace = (id, data) =>
   req("PUT", `/workspaces/${id}`, data);

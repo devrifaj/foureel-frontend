@@ -217,7 +217,7 @@ export default function Dashboard() {
   const [editMemberForm, setEditMemberForm] = useState(DEFAULT_EDIT_FORM);
   const [editMemberErrors, setEditMemberErrors] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { logout, user, isTeamAdmin, canAccessDashboardSection } = useAuth();
+  const { logout, user, isTeamAdmin, isTeamEditor, canAccessDashboardSection } = useAuth();
   const { lang, setLang, t } = useLang();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -358,7 +358,20 @@ export default function Dashboard() {
     if (!selectedMember?._id) return;
     deleteMemberMut.mutate(selectedMember._id);
   };
-  const openCount = tasks.filter((task) => task.column !== 'klaar').length;
+  const openCount = tasks.filter((task) => {
+    if (task.column === 'klaar') return false;
+    if (isTeamEditor && user?.name) {
+      return (
+        String(task.assignee || '')
+          .trim()
+          .toLowerCase() ===
+        String(user.name)
+          .trim()
+          .toLowerCase()
+      );
+    }
+    return true;
+  }).length;
   const visibleSections = NAV_SECTIONS
     .map((section) => ({
       ...section,

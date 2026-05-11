@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useLang } from "../../context/LangContext";
 import {
   getWorkspaces,
+  getWorkspace,
   createWorkspace,
   updateWorkspace,
   deleteWorkspace,
@@ -117,6 +118,8 @@ const WS_RES_TABS = [
   { key: "shotlist", labelKey: "wsRes_shotlist", icon: "🎬" },
   { key: "moodboard", labelKey: "wsRes_moodboard", icon: "🖼️" },
   { key: "interview", labelKey: "wsRes_interview", icon: "💬" },
+  { key: "rawFootageDisk", labelKey: "wsRes_rawFootageDisk", icon: "💾" },
+  { key: "invoice", labelKey: "wsRes_invoice", icon: "🧾" },
 ];
 
 function FaseSelect({ value, onChange }) {
@@ -156,6 +159,7 @@ export default function WorkspaceView() {
   const { user, isTeamAdmin } = useAuth();
   const { t, lang } = useLang();
   const [wsTab, setWsTab] = useState("inbox");
+  const [workspaceListArchived, setWorkspaceListArchived] = useState(false);
   const [batchId, setBatchId] = useState(null);
   const [addVideoBatchId, setAddVideoBatchId] = useState(null);
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -191,6 +195,8 @@ export default function WorkspaceView() {
   const [resTab, setResTab] = useState("scripts");
   const [resDraftName, setResDraftName] = useState("");
   const [resDraftNote, setResDraftNote] = useState("");
+  const [resDraftInvoiceNumber, setResDraftInvoiceNumber] = useState("");
+  const [resDraftInvoiceLink, setResDraftInvoiceLink] = useState("");
   const [batchNotesDraft, setBatchNotesDraft] = useState("");
   const [batchNotesStatus, setBatchNotesStatus] = useState("idle");
   const [batchNotesError, setBatchNotesError] = useState("");
@@ -200,8 +206,17 @@ export default function WorkspaceView() {
   const qc = useQueryClient();
 
   const { data: batches = [], isLoading: isWorkspacesLoading } = useQuery({
-    queryKey: ["workspaces"],
-    queryFn: getWorkspaces,
+    queryKey: ["workspaces", { archived: workspaceListArchived }],
+    queryFn: () => getWorkspaces({ archived: workspaceListArchived }),
+  });
+  const {
+    data: routeWorkspace,
+    isLoading: isRouteWorkspaceLoading,
+    isError: isRouteWorkspaceError,
+  } = useQuery({
+    queryKey: ["workspace", routeBatchId],
+    queryFn: () => getWorkspace(routeBatchId),
+    enabled: Boolean(routeBatchId),
   });
   const { data: clients = [] } = useQuery({
     queryKey: ["clients"],
@@ -216,32 +231,46 @@ export default function WorkspaceView() {
   const updateMut = useMutation({
     mutationFn: ({ wsId, subBId, vId, ...d }) =>
       updateWorkspaceVideo(wsId, subBId, vId, d),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workspaces"] }),
+    onSuccess: (_d, variables) => {
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
+      const wsId = variables?.wsId;
+      if (wsId) qc.invalidateQueries({ queryKey: ["workspace", wsId] });
+    },
   });
   const createBatchMut = useMutation({
     mutationFn: createWorkspace,
     onSuccess: (created) => {
+      setWorkspaceListArchived(false);
       qc.invalidateQueries({ queryKey: ["workspaces"] });
       if (created?._id) setBatchId(created._id);
     },
   });
   const deleteBatchMut = useMutation({
     mutationFn: deleteWorkspace,
-    onSuccess: () => {
+    onSuccess: (_data, deletedId) => {
       qc.invalidateQueries({ queryKey: ["workspaces"] });
+      if (deletedId) qc.removeQueries({ queryKey: ["workspace", deletedId] });
       if (batchId) setBatchId(null);
     },
   });
   const updateBatchMut = useMutation({
     mutationFn: ({ id, data }) => updateWorkspace(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workspaces"] }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
+      if (variables?.id) {
+        qc.invalidateQueries({ queryKey: ["workspace", variables.id] });
+      }
+    },
   });
   const updateBatchNotesMut = useMutation({
     mutationFn: ({ id, notes }) => updateWorkspace(id, { notes }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setBatchNotesStatus("saved");
       setBatchNotesError("");
       qc.invalidateQueries({ queryKey: ["workspaces"] });
+      if (variables?.id) {
+        qc.invalidateQueries({ queryKey: ["workspace", variables.id] });
+      }
     },
     onError: (error) => {
       setBatchNotesStatus("error");
@@ -252,26 +281,31 @@ export default function WorkspaceView() {
   });
   const addSubBatchMut = useMutation({
     mutationFn: ({ wsId, data }) => addWorkspaceBatch(wsId, data),
-    onSuccess: (ws) => {
-      qc.setQueryData(["workspaces"], (prev = []) =>
-        prev.map((w) => (w._id === ws._id ? ws : w)),
-      );
+    onSuccess: (_ws, variables) => {
       qc.invalidateQueries({ queryKey: ["workspaces"] });
+      if (variables?.wsId) {
+        qc.invalidateQueries({ queryKey: ["workspace", variables.wsId] });
+      }
     },
   });
   const deleteSubBatchMut = useMutation({
     mutationFn: ({ wsId, bId }) => deleteWorkspaceBatch(wsId, bId),
-    onSuccess: (ws) => {
-      if (ws && ws._id) {
-        qc.setQueryData(["workspaces"], (prev = []) =>
-          prev.map((w) => (w._id === ws._id ? ws : w)),
-        );
-      }
+    onSuccess: (_ws, variables) => {
       qc.invalidateQueries({ queryKey: ["workspaces"] });
+      if (variables?.wsId) {
+        qc.invalidateQueries({ queryKey: ["workspace", variables.wsId] });
+      }
     },
   });
 
-  const batch = batches.find((b) => b._id === batchId);
+  const batch = useMemo(() => {
+    const id = routeBatchId || batchId;
+    if (!id) return null;
+    if (routeWorkspace && String(routeWorkspace._id) === String(id)) {
+      return routeWorkspace;
+    }
+    return batches.find((b) => String(b._id) === String(id)) || null;
+  }, [routeBatchId, batchId, routeWorkspace, batches]);
   const subBatches = batch?.batches || [];
   useEffect(() => {
     const nextNotes = batch?.notes || "";
@@ -392,12 +426,6 @@ export default function WorkspaceView() {
     }
     setBatchId(null);
   }, [routeBatchId]);
-
-  useEffect(() => {
-    if (!routeBatchId || batches.length === 0) return;
-    const exists = batches.some((entry) => entry._id === routeBatchId);
-    if (!exists) navigate("/dashboard/workspace", { replace: true });
-  }, [routeBatchId, batches, navigate]);
 
   const scriptWords = useMemo(
     () => (scriptDraft.trim() ? scriptDraft.trim().split(/\s+/).length : 0),
@@ -629,6 +657,7 @@ export default function WorkspaceView() {
     setNewVideoName("");
     setAddVideoBatchId(null);
     qc.invalidateQueries({ queryKey: ["workspaces"] });
+    qc.invalidateQueries({ queryKey: ["workspace", batch._id] });
   };
 
   const createNewSubBatch = () => {
@@ -647,6 +676,17 @@ export default function WorkspaceView() {
 
   if (user?.role !== "team") {
     return <Navigate to="/portaal" replace />;
+  }
+
+  if (routeBatchId && isRouteWorkspaceError) {
+    return <Navigate to="/dashboard/workspace" replace />;
+  }
+  if (routeBatchId && !batch && isRouteWorkspaceLoading) {
+    return (
+      <section className="view active" style={{ padding: 32 }}>
+        <LoadingSpinner />
+      </section>
+    );
   }
 
   const deleteWorkspaceOverlay = pendingDeleteBatch && (
@@ -688,7 +728,10 @@ export default function WorkspaceView() {
               deleteBatchMut.mutate(id, {
                 onSuccess: () => {
                   setPendingDeleteBatch(null);
-                  if (isCurrent) setBatchId(null);
+                  if (isCurrent) {
+                    setBatchId(null);
+                    navigate("/dashboard/workspace", { replace: true });
+                  }
                 },
               });
             }}
@@ -1127,6 +1170,9 @@ export default function WorkspaceView() {
                 );
                 setPendingDeleteVideo(null);
                 qc.invalidateQueries({ queryKey: ["workspaces"] });
+                qc.invalidateQueries({
+                  queryKey: ["workspace", pendingDeleteVideo.wsId],
+                });
               } finally {
                 setIsDeletingVideo(false);
               }
@@ -1569,6 +1615,32 @@ export default function WorkspaceView() {
     };
 
     const addResourceItem = () => {
+      if (resTab === "invoice") {
+        const invoiceNumber = resDraftInvoiceNumber.trim();
+        const invoiceLink = resDraftInvoiceLink.trim();
+        if (!invoiceNumber && !invoiceLink) return;
+        const invList = resources.invoice || [];
+        const nextResources = {
+          ...resources,
+          invoice: [
+            ...invList,
+            {
+              name: "",
+              note: "",
+              status: "",
+              invoiceNumber,
+              invoiceLink,
+            },
+          ],
+        };
+        updateBatchMut.mutate({
+          id: batch._id,
+          data: { resources: nextResources },
+        });
+        setResDraftInvoiceNumber("");
+        setResDraftInvoiceLink("");
+        return;
+      }
       const name = resDraftName.trim();
       const note = resDraftNote.trim();
       if (!name) return;
@@ -1594,6 +1666,13 @@ export default function WorkspaceView() {
         id: batch._id,
         data: { resources: nextResources },
       });
+    };
+
+    const invoiceHref = (raw) => {
+      const u = typeof raw === "string" ? raw.trim() : "";
+      if (!u) return "";
+      if (/^https?:\/\//i.test(u)) return u;
+      return `https://${u}`;
     };
 
     return (
@@ -1629,6 +1708,33 @@ export default function WorkspaceView() {
                   >
                     ✏️ {t("wsEditProject")}
                   </button>
+                  {batch.archived ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() =>
+                        updateBatchMut.mutate({
+                          id: batch._id,
+                          data: { archived: false, archivedAt: null },
+                        })
+                      }
+                    >
+                      ↩ {t("wsRestoreWorkspace")}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() =>
+                        updateBatchMut.mutate({
+                          id: batch._id,
+                          data: { archived: true, archivedAt: new Date().toISOString() },
+                        })
+                      }
+                    >
+                      📦 {t("wsArchiveWorkspace")}
+                    </button>
+                  )}
                   <button
                     className="btn btn-ghost btn-sm"
                     style={{ color: "#c04040", borderColor: "#e8c8c8" }}
@@ -2466,6 +2572,8 @@ export default function WorkspaceView() {
                     setResTab(tab.key);
                     setResDraftName("");
                     setResDraftNote("");
+                    setResDraftInvoiceNumber("");
+                    setResDraftInvoiceLink("");
                   }}
                 >
                   <span>{tab.icon}</span>
@@ -2474,61 +2582,145 @@ export default function WorkspaceView() {
               ))}
             </div>
             <div className="ws-res-body">
-              {activeResources.map((item, idx) => (
-                <div key={`${item.name}-${idx}`} className="ws-res-item">
-                  <span className="ws-res-item-icon">📄</span>
-                  <div className="ws-res-item-name">{item.name}</div>
-                  <div className="ws-res-item-meta">
-                    {item.note || item.status || "—"}
+              {activeResources.map((item, idx) =>
+                resTab === "invoice" ? (
+                  <div
+                    key={`inv-${idx}-${item.invoiceNumber || ""}-${item.invoiceLink || ""}`}
+                    className="ws-res-item"
+                  >
+                    <span className="ws-res-item-icon">🧾</span>
+                    <div className="ws-res-item-name">
+                      <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
+                        {t("wsInvoiceNumber")}
+                      </span>
+                      <div>{item.invoiceNumber?.trim() || "—"}</div>
+                    </div>
+                    <div className="ws-res-item-meta">
+                      <span style={{ fontSize: "11px", color: "var(--text-3)" }}>
+                        {t("wsInvoiceLink")}
+                      </span>
+                      <div>
+                        {item.invoiceLink?.trim() ? (
+                          <a
+                            href={invoiceHref(item.invoiceLink)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: "var(--accent)" }}
+                          >
+                            {item.invoiceLink.trim()}
+                          </a>
+                        ) : (
+                          "—"
+                        )}
+                      </div>
+                    </div>
+                    {isTeamAdmin ? (
+                      <button
+                        type="button"
+                        className="ws-res-item-del"
+                        onClick={() => deleteResourceItem(idx)}
+                      >
+                        ✕
+                      </button>
+                    ) : null}
                   </div>
-                  {isTeamAdmin ? (
-                    <button
-                      type="button"
-                      className="ws-res-item-del"
-                      onClick={() => deleteResourceItem(idx)}
-                    >
-                      ✕
-                    </button>
-                  ) : null}
-                </div>
-              ))}
+                ) : (
+                  <div key={`${item.name}-${idx}`} className="ws-res-item">
+                    <span className="ws-res-item-icon">📄</span>
+                    <div className="ws-res-item-name">{item.name}</div>
+                    <div className="ws-res-item-meta">
+                      {item.note || item.status || "—"}
+                    </div>
+                    {isTeamAdmin ? (
+                      <button
+                        type="button"
+                        className="ws-res-item-del"
+                        onClick={() => deleteResourceItem(idx)}
+                      >
+                        ✕
+                      </button>
+                    ) : null}
+                  </div>
+                ),
+              )}
 
-              <div
-                className="ws-res-add-row"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1.2fr 1fr auto",
-                  gap: "8px",
-                  marginTop: "8px",
-                }}
-              >
-                <input
-                  className="form-input"
-                  placeholder={t("eventNameLabel")}
-                  value={resDraftName}
-                  onChange={(e) => setResDraftName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") addResourceItem();
+              {resTab === "invoice" ? (
+                <div
+                  className="ws-res-add-row"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr auto",
+                    gap: "8px",
+                    marginTop: "8px",
                   }}
-                />
-                <input
-                  className="form-input"
-                  placeholder={t("wsOptionalNote")}
-                  value={resDraftNote}
-                  onChange={(e) => setResDraftNote(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") addResourceItem();
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={addResourceItem}
-                  disabled={!resDraftName.trim()}
                 >
-                  {t("wsAddItem")}
-                </button>
-              </div>
+                  <input
+                    className="form-input"
+                    placeholder={t("wsInvoiceNumberPlaceholder")}
+                    value={resDraftInvoiceNumber}
+                    onChange={(e) => setResDraftInvoiceNumber(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") addResourceItem();
+                    }}
+                  />
+                  <input
+                    className="form-input"
+                    placeholder={t("wsInvoiceLinkPlaceholder")}
+                    value={resDraftInvoiceLink}
+                    onChange={(e) => setResDraftInvoiceLink(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") addResourceItem();
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={addResourceItem}
+                    disabled={
+                      !resDraftInvoiceNumber.trim() && !resDraftInvoiceLink.trim()
+                    }
+                  >
+                    {t("wsAddItem")}
+                  </button>
+                </div>
+              ) : (
+                <div
+                  className="ws-res-add-row"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1.2fr 1fr auto",
+                    gap: "8px",
+                    marginTop: "8px",
+                  }}
+                >
+                  <input
+                    className="form-input"
+                    placeholder={t("eventNameLabel")}
+                    value={resDraftName}
+                    onChange={(e) => setResDraftName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") addResourceItem();
+                    }}
+                  />
+                  <input
+                    className="form-input"
+                    placeholder={t("wsOptionalNote")}
+                    value={resDraftNote}
+                    onChange={(e) => setResDraftNote(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") addResourceItem();
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={addResourceItem}
+                    disabled={!resDraftName.trim()}
+                  >
+                    {t("wsAddItem")}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -2602,13 +2794,38 @@ export default function WorkspaceView() {
             <div className="page-subtitle">
               {t("wsPageSubtitle")}
             </div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                marginTop: "12px",
+              }}
+            >
+              <button
+                type="button"
+                className={`btn btn-sm${!workspaceListArchived ? " btn-primary" : " btn-ghost"}`}
+                onClick={() => setWorkspaceListArchived(false)}
+              >
+                {t("wsWorkspaceActiveList")}
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm${workspaceListArchived ? " btn-primary" : " btn-ghost"}`}
+                onClick={() => setWorkspaceListArchived(true)}
+              >
+                {t("wsWorkspaceArchivedList")}
+              </button>
+            </div>
           </div>
-          <button
-            className="ws-new-btn"
-            onClick={() => setShowBatchModal(true)}
-          >
-            {t("wsAddWorkspace")}
-          </button>
+          {isTeamAdmin && !workspaceListArchived ? (
+            <button
+              className="ws-new-btn"
+              onClick={() => setShowBatchModal(true)}
+            >
+              {t("wsAddWorkspace")}
+            </button>
+          ) : null}
         </div>
         <div
           style={{
@@ -2649,7 +2866,7 @@ export default function WorkspaceView() {
                   <th className="ws-th">{t("wsStageHeader")}</th>
                   <th className="ws-th">{t("wsEditorHeader")}</th>
                   <th className="ws-th">{t("wsClientHeader")}</th>
-                  <th className="ws-th" style={{ width: 36 }} />
+                  {isTeamAdmin ? <th className="ws-th" style={{ width: 36 }} /> : null}
                 </tr>
               </thead>
               <tbody>
@@ -2702,11 +2919,13 @@ export default function WorkspaceView() {
                             <span className="ws-row-skel ws-row-skel-client" />
                           </div>
                         </td>
-                        <td className="ws-td">
-                          <div className="ws-td-inner">
-                            <span className="ws-row-skel ws-row-skel-action" />
-                          </div>
-                        </td>
+                        {isTeamAdmin ? (
+                          <td className="ws-td">
+                            <div className="ws-td-inner">
+                              <span className="ws-row-skel ws-row-skel-action" />
+                            </div>
+                          </td>
+                        ) : null}
                       </tr>
                     ))
                   : filteredBatches.map((b) => {
@@ -2906,35 +3125,39 @@ export default function WorkspaceView() {
                           </span>
                         </div>
                       </td>
-                      <td className="ws-td">
-                        <div
-                          className="ws-tr-actions"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            type="button"
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              color: "var(--text-3)",
-                              fontSize: 13,
-                              padding: 3,
-                            }}
-                            onClick={() => setPendingDeleteBatch(b)}
+                      {isTeamAdmin ? (
+                        <td className="ws-td">
+                          <div
+                            className="ws-tr-actions"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            ✕
-                          </button>
-                        </div>
-                      </td>
+                            <button
+                              type="button"
+                              style={{
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                color: "var(--text-3)",
+                                fontSize: 13,
+                                padding: 3,
+                              }}
+                              onClick={() => setPendingDeleteBatch(b)}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            <div className="ws-add-row" onClick={() => setShowBatchModal(true)}>
-              {t("wsAddWorkspaceFooter")}
-            </div>
+            {isTeamAdmin ? (
+              <div className="ws-add-row" onClick={() => setShowBatchModal(true)}>
+                {t("wsAddWorkspaceFooter")}
+              </div>
+            ) : null}
           </div>
         </div>
       </section>

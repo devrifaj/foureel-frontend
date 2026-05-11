@@ -18,6 +18,17 @@ const VALID_TASK_PRIORITIES = new Set(['High', 'Normal', 'Low']);
 const COLUMN_INDEX = Object.fromEntries(COLS.map((col, idx) => [col.id, idx]));
 const LINK_URL_REGEX = /^https?:\/\//i;
 
+function namesMatchAssignee(taskAssignee, userName) {
+  return (
+    String(taskAssignee || '')
+      .trim()
+      .toLowerCase() ===
+    String(userName || '')
+      .trim()
+      .toLowerCase()
+  );
+}
+
 const newTaskErrBorder = {
   borderColor: 'var(--accent)',
   boxShadow: '0 0 0 1px var(--accent)',
@@ -323,6 +334,8 @@ function KanbanColumn({ columnId, title, count, children }) {
 export default function TakenView() {
   const { t } = useLang();
   const { isTeamAdmin, isTeamUser, user } = useAuth();
+  /** Non-admins cannot assign new tasks to other people (editors and any future non-admin team role). */
+  const restrictAssigneeToSelf = isTeamUser && !isTeamAdmin;
   const sensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: { distance: 6 },
@@ -379,6 +392,9 @@ export default function TakenView() {
 
   const openNewTaskModal = () => {
     setNewTaskErrors({});
+    if (restrictAssigneeToSelf && user?.name) {
+      setForm((f) => ({ ...f, assignee: user.name }));
+    }
     setNewModal(true);
   };
 
@@ -618,7 +634,16 @@ export default function TakenView() {
     return String(a._id).localeCompare(String(b._id));
   }), [tasks]);
 
-  const filtered = filter === 'all' ? orderedTasks : orderedTasks.filter((x) => x.assignee === filter);
+  const filtered = restrictAssigneeToSelf
+    ? orderedTasks
+    : filter === 'all'
+      ? orderedTasks
+      : orderedTasks.filter((x) => x.assignee === filter);
+
+  const editorCanEditOpenTask =
+    Boolean(taskModal) &&
+    (isTeamAdmin ||
+      (restrictAssigneeToSelf && namesMatchAssignee(taskModal.assignee, user?.name)));
 
   const handleDragEnd = ({ active, over }) => {
     scheduleClearSuppressTaskCardClick();
@@ -804,35 +829,37 @@ export default function TakenView() {
       </div>
 
       <div className="kanban-header">
-        <div className="filter-bar">
-          <span className="filter-bar-label">{t('filter')}</span>
-          <button
-            type="button"
-            className={`filter-btn${filter === 'all' ? ' active' : ''}`}
-            onClick={() => setFilter('all')}
-          >
-            {t('allTasks')}
-          </button>
-          {showTeamFilterSkeleton ? <TakenFilterSkeletons count={teamFilterSkeletonCount} /> : null}
-          {!showTeamFilterSkeleton
-            ? memberFilters.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  className={`filter-btn${filter === f.id ? ' active' : ''}`}
-                  onClick={() => setFilter(f.id)}
-                >
-                  <div
-                    className="filter-avatar"
-                    style={{ background: assigneeLookup[f.id]?.bg || 'var(--text-3)' }}
+        {isTeamAdmin ? (
+          <div className="filter-bar">
+            <span className="filter-bar-label">{t('filter')}</span>
+            <button
+              type="button"
+              className={`filter-btn${filter === 'all' ? ' active' : ''}`}
+              onClick={() => setFilter('all')}
+            >
+              {t('allTasks')}
+            </button>
+            {showTeamFilterSkeleton ? <TakenFilterSkeletons count={teamFilterSkeletonCount} /> : null}
+            {!showTeamFilterSkeleton
+              ? memberFilters.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={`filter-btn${filter === f.id ? ' active' : ''}`}
+                    onClick={() => setFilter(f.id)}
                   >
-                    {assigneeLookup[f.id]?.init || f.name?.[0] || '?'}
-                  </div>
-                  <span className="filter-btn-name">{f.name}</span>
-                </button>
-              ))
-            : null}
-        </div>
+                    <div
+                      className="filter-avatar"
+                      style={{ background: assigneeLookup[f.id]?.bg || 'var(--text-3)' }}
+                    >
+                      {assigneeLookup[f.id]?.init || f.name?.[0] || '?'}
+                    </div>
+                    <span className="filter-btn-name">{f.name}</span>
+                  </button>
+                ))
+              : null}
+          </div>
+        ) : null}
       </div>
       {tasksLoading ? (
         <TakenBoardSkeleton t={t} />
@@ -1198,7 +1225,7 @@ export default function TakenView() {
 
                   <div>
                     <div style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: '10px' }}>{t('taskMoveToLabel')}</div>
-                    {isTeamAdmin ? (
+                    {editorCanEditOpenTask ? (
                       <div style={{ display: 'flex', gap: '8px' }}>
                         {COLS.map((col) => (
                           <button
@@ -1262,30 +1289,35 @@ export default function TakenView() {
               </div>
             </div>
             <div className="modal-footer">
-              {isTeamAdmin ? (
+              {editorCanEditOpenTask ? (
                 <>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{ marginRight: 'auto' }}
-                    onClick={() =>
-                      archiveMut.mutate({
-                        id: taskModal._id,
-                        archivedReason: taskModal.column === 'klaar' ? 'completed' : 'manual',
-                      })
-                    }
-                  >
-                    {t('archive')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => setConfirmDeleteTask(taskModal)}
-                    disabled={softDeleteMut.isPending}
-                    style={{ color: '#dc2626', borderColor: '#fecaca' }}
-                  >
-                    {t('delete')}
-                  </button>
+                  {(isTeamAdmin ||
+                    (restrictAssigneeToSelf && namesMatchAssignee(taskModal.assignee, user?.name))) ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ marginRight: 'auto' }}
+                      onClick={() =>
+                        archiveMut.mutate({
+                          id: taskModal._id,
+                          archivedReason: taskModal.column === 'klaar' ? 'completed' : 'manual',
+                        })
+                      }
+                    >
+                      {t('archive')}
+                    </button>
+                  ) : null}
+                  {isTeamAdmin ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setConfirmDeleteTask(taskModal)}
+                      disabled={softDeleteMut.isPending}
+                      style={{ color: '#dc2626', borderColor: '#fecaca' }}
+                    >
+                      {t('delete')}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="btn btn-primary"
@@ -1305,7 +1337,10 @@ export default function TakenView() {
                       setCloseTaskModalOnUpdateSuccess(true);
                       updateMut.mutate({
                         id: taskModal._id,
-                        assignee: taskEditForm.assignee,
+                        assignee:
+                          restrictAssigneeToSelf && user?.name
+                            ? user.name
+                            : taskEditForm.assignee,
                         dueDate: taskEditForm.dueDate,
                         priority: taskEditForm.priority,
                         description: taskEditForm.description,
@@ -1434,31 +1469,41 @@ export default function TakenView() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group">
                   <label className="form-label" htmlFor="task-new-assignee">{t('taskAssigneeLabel')}</label>
-                  <select
-                    id="task-new-assignee"
-                    className="form-input"
-                    value={form.assignee}
-                    onChange={(e) => {
-                      clearNewTaskFieldError('assignee');
-                      setForm((f) => ({ ...f, assignee: e.target.value }));
-                    }}
-                    style={newTaskErrors.assignee ? newTaskErrBorder : undefined}
-                    aria-invalid={Boolean(newTaskErrors.assignee)}
-                    aria-describedby={newTaskErrors.assignee ? 'task-new-assignee-err' : undefined}
-                  >
-                    {teamMembers.length === 0 ? (
-                      <option value="" disabled>{t('taskAssigneeEmpty')}</option>
-                    ) : (
-                      <>
-                        <option value="">{t('taskAssigneePlaceholder')}</option>
-                        {teamMembers.map((m) => (
-                          <option key={m._id || m.name} value={m.name}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </>
-                    )}
-                  </select>
+                  {restrictAssigneeToSelf ? (
+                    <div
+                      className="form-input"
+                      style={{ display: 'flex', alignItems: 'center', opacity: 0.9 }}
+                      aria-readonly="true"
+                    >
+                      {user?.name || user?.email || '—'}
+                    </div>
+                  ) : (
+                    <select
+                      id="task-new-assignee"
+                      className="form-input"
+                      value={form.assignee}
+                      onChange={(e) => {
+                        clearNewTaskFieldError('assignee');
+                        setForm((f) => ({ ...f, assignee: e.target.value }));
+                      }}
+                      style={newTaskErrors.assignee ? newTaskErrBorder : undefined}
+                      aria-invalid={Boolean(newTaskErrors.assignee)}
+                      aria-describedby={newTaskErrors.assignee ? 'task-new-assignee-err' : undefined}
+                    >
+                      {teamMembers.length === 0 ? (
+                        <option value="" disabled>{t('taskAssigneeEmpty')}</option>
+                      ) : (
+                        <>
+                          <option value="">{t('taskAssigneePlaceholder')}</option>
+                          {teamMembers.map((m) => (
+                            <option key={m._id || m.name} value={m.name}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </>
+                      )}
+                    </select>
+                  )}
                   {newTaskErrors.assignee ? (
                     <div id="task-new-assignee-err" className="form-field-error" role="alert">
                       {newTaskErrors.assignee}
@@ -1545,7 +1590,9 @@ export default function TakenView() {
                 type="button"
                 className="btn btn-primary"
                 onClick={() => {
-                  const errors = validateNewTaskForm(form, teamMembers, clients, t);
+                  const formForValidate =
+                    restrictAssigneeToSelf && user?.name ? { ...form, assignee: user.name } : form;
+                  const errors = validateNewTaskForm(formForValidate, teamMembers, clients, t);
                   if (Object.keys(errors).length) {
                     setNewTaskErrors(errors);
                     return;
@@ -1554,7 +1601,10 @@ export default function TakenView() {
                   createMut.mutate({
                     ...form,
                     title: form.title.trim(),
-                    assignee: form.assignee.trim(),
+                    assignee:
+                      restrictAssigneeToSelf && user?.name
+                        ? user.name.trim()
+                        : form.assignee.trim(),
                     clientId: form.clientId || undefined,
                     client: selectedClient?.name || '',
                   });

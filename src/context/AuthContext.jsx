@@ -26,7 +26,13 @@ export function AuthProvider({ children }) {
   };
 
   const isTeamUser = user?.role === 'team';
-  const teamAccessLevel = isTeamUser ? (user?.teamAccessLevel || 'editor') : null;
+  const rawTeamAccess = isTeamUser
+    ? String(user?.teamAccessLevel || 'editor')
+        .trim()
+        .toLowerCase()
+    : null;
+  const teamAccessLevel =
+    isTeamUser && rawTeamAccess === 'admin' ? 'admin' : isTeamUser ? 'editor' : null;
   const isTeamAdmin = isTeamUser && teamAccessLevel === 'admin';
   const isTeamEditor = isTeamUser && teamAccessLevel === 'editor';
 
