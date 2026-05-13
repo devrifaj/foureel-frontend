@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useAuth } from '../../context/AuthContext';
 import { useLang } from '../../context/LangContext';
 import { getPortalMe, sendClientNote, saveQuestionnaire, approveVideo, requestRevision } from '../../api';
@@ -55,33 +56,6 @@ function portalShootBadgeLabel(status, t) {
   if (status === "wrapped") return t("portalShootBadgeWrapped");
   if (status === "soon") return t("portalShootBadgeSoon");
   return t("portalShootBadgePlanned");
-}
-
-function PortalToastBar({ toast }) {
-  if (!toast) return null;
-  const isError = toast.type === "error";
-  return (
-    <div
-      role={isError ? "alert" : "status"}
-      aria-live="polite"
-      style={{
-        position: "fixed",
-        right: "24px",
-        bottom: "24px",
-        maxWidth: "min(360px, calc(100vw - 48px))",
-        background: isError ? "#9f3a3a" : "var(--text)",
-        color: "white",
-        borderRadius: "10px",
-        padding: "12px 16px",
-        fontSize: "13px",
-        zIndex: 2000,
-        boxShadow: "0 8px 24px rgba(28,20,16,.18)",
-        lineHeight: 1.4,
-      }}
-    >
-      {toast.message}
-    </div>
-  );
 }
 
 // ── QUESTIONNAIRE ─────────────────────────────────────────────
@@ -180,7 +154,7 @@ function getQuestionnaireMissingKeys(answers = {}) {
   return Q_FIELDS.filter((field) => !isQuestionnaireValueFilled(answers[field.key], field.type)).map((field) => field.key);
 }
 
-function Questionnaire({ clientName, onSubmit, onToast, t, lang }) {
+function Questionnaire({ clientName, onSubmit, onSubmitError, t, lang }) {
   const topics = lang === "en" ? Q_TOPICS_EN : Q_TOPICS;
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
@@ -325,7 +299,7 @@ function Questionnaire({ clientName, onSubmit, onToast, t, lang }) {
                 await saveMut.mutateAsync({a:answers,s:true});
                 setSubmitted(true);
               } catch (e) {
-                onToast?.(e?.message || t('portalToastQSubmitErr'), 'error');
+                onSubmitError?.(e?.message || t('portalToastQSubmitErr'));
               }
             }}
             disabled={saveMut.isPending || !canSubmit}
@@ -351,18 +325,7 @@ export default function PortalClientView() {
   const [revisionModalVideo, setRevisionModalVideo] = useState(null);
   const [revisionModalNote, setRevisionModalNote] = useState('');
   const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(null);
-  const [toast, setToast] = useState(null);
   const qc = useQueryClient();
-
-  const showToast = useCallback((message, type = 'success') => {
-    setToast({ message, type });
-  }, []);
-
-  useEffect(() => {
-    if (!toast) return undefined;
-    const id = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(id);
-  }, [toast]);
 
   const { data, isLoading } = useQuery({
     queryKey:['portalMe'],
@@ -374,20 +337,20 @@ export default function PortalClientView() {
     onSuccess: () => {
       setNote('');
       qc.invalidateQueries({ queryKey: ['portalMe'] });
-      showToast(t('portalToastNoteOk'), 'success');
+      toast.success(t('portalToastNoteOk'));
     },
     onError: (e) => {
-      showToast(e?.message || t('portalToastNoteErr'), 'error');
+      toast.error(e?.message || t('portalToastNoteErr'));
     },
   });
   const approveMut = useMutation({
     mutationFn: approveVideo,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portalMe'] });
-      showToast(t('portalToastApproveOk'), 'success');
+      toast.success(t('portalToastApproveOk'));
     },
     onError: (e) => {
-      showToast(e?.message || t('portalToastApproveErr'), 'error');
+      toast.error(e?.message || t('portalToastApproveErr'));
     },
     onSettled: () => {
       setProcessingVideoId(null);
@@ -397,10 +360,10 @@ export default function PortalClientView() {
     mutationFn: ({ videoId, note: revisionNote }) => requestRevision(videoId, revisionNote),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portalMe'] });
-      showToast(t('portalToastRevisionOk'), 'success');
+      toast.success(t('portalToastRevisionOk'));
     },
     onError: (e) => {
-      showToast(e?.message || t('portalToastRevisionErr'), 'error');
+      toast.error(e?.message || t('portalToastRevisionErr'));
     },
     onSettled: () => {
       setProcessingVideoId(null);
@@ -486,8 +449,16 @@ export default function PortalClientView() {
             EN
           </button>
         </div>
-        <Questionnaire clientName={data?.client?.name} onSubmit={()=>{ setShowQuestionnaire(false); qc.invalidateQueries({ queryKey: ['portalMe'] }); }} onToast={showToast} t={t} lang={lang} />
-        <PortalToastBar toast={toast} />
+        <Questionnaire
+          clientName={data?.client?.name}
+          onSubmit={() => {
+            setShowQuestionnaire(false);
+            qc.invalidateQueries({ queryKey: ['portalMe'] });
+          }}
+          onSubmitError={(msg) => toast.error(msg)}
+          t={t}
+          lang={lang}
+        />
       </>
     );
   }
@@ -1008,7 +979,6 @@ export default function PortalClientView() {
           </div>
         </div>
       )}
-      <PortalToastBar toast={toast} />
     </div>
   );
 }
