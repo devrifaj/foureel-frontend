@@ -52,10 +52,125 @@ function portalDeliverableStatusText(d, t) {
   return t('portalDeliverableStatusInProgress');
 }
 
+/** Matches server-side inclusion in `reviewVideos` (client can still act from the project list). */
+function portalDeliverableShowClientActions(d) {
+  return ['waitreview', 'client_review', 'client_revision'].includes(d.editFase);
+}
+
 function portalShootBadgeLabel(status, t) {
   if (status === "wrapped") return t("portalShootBadgeWrapped");
   if (status === "soon") return t("portalShootBadgeSoon");
   return t("portalShootBadgePlanned");
+}
+
+function PortalWorkspaceDeliverablesList({
+  deliverables,
+  emptyLabel,
+  t,
+  showClientActions = false,
+  onApproveVideo,
+  onRequestRevisionVideo,
+  processingVideoId,
+  approveMutationPending,
+  revisionMutationPending,
+}) {
+  if (!deliverables?.length) {
+    return (
+      <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-3)', fontStyle: 'italic' }}>
+        {emptyLabel}
+      </p>
+    );
+  }
+  return deliverables.map((d) => {
+    const isRevision = d.editFase === 'client_revision' || d.revision;
+    const statusText = portalDeliverableStatusText(d, t);
+    const statusColor =
+      isRevision ? 'var(--amber)' : d.approved || d.editFase === 'client_approved' ? 'var(--sage)' : 'var(--text-3)';
+    const showAct = showClientActions && portalDeliverableShowClientActions(d);
+    const rowBusy =
+      processingVideoId === d._id && (approveMutationPending || revisionMutationPending);
+    return (
+      <div
+        key={d._id}
+        className="portal-archive-video-row"
+        style={
+          isRevision
+            ? {
+                background: '#fffbeb',
+                borderColor: 'var(--amber)',
+              }
+            : undefined
+        }
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="portal-archive-video-name">{d.name}</div>
+          <div className="portal-archive-video-meta">
+            {t('portalArchiveBatch')} {d.batchName || '—'}
+          </div>
+          <div
+            style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              marginTop: '4px',
+              color: statusColor,
+            }}
+          >
+            {statusText}
+          </div>
+          {isRevision && d.revisionNote && (
+            <div
+              style={{
+                marginTop: '6px',
+                fontSize: '11px',
+                color: 'var(--text-2)',
+                padding: '6px 8px',
+                background: 'rgba(212,168,75,.12)',
+                borderRadius: '6px',
+                borderLeft: '3px solid var(--amber)',
+              }}
+            >
+              <strong>{t('portalReviewRevisionLabel')}</strong> {d.revisionNote}
+            </div>
+          )}
+        </div>
+        <div className="portal-archive-video-actions">
+          {d.frameUrl ? (
+            <a href={d.frameUrl} target="_blank" rel="noopener noreferrer">
+              {t('portalReviewFrameBtn')}
+            </a>
+          ) : (
+            <span style={{ fontSize: '11px', color: 'var(--text-3)', fontStyle: 'italic' }}>
+              {t('portalReviewFrameMissing')}
+            </span>
+          )}
+          {showAct && (
+            <>
+              <button
+                type="button"
+                className="btn-watch"
+                onClick={() => {
+                  onApproveVideo?.(d._id);
+                }}
+                disabled={rowBusy}
+                style={{ opacity: rowBusy ? 0.6 : 1 }}
+              >
+                {rowBusy && approveMutationPending ? t('portalReviewBusy') : t('portalReviewApprove')}
+              </button>
+              <button
+                type="button"
+                className="btn-watch"
+                onClick={() => onRequestRevisionVideo?.(d)}
+                disabled={rowBusy}
+                style={{ opacity: rowBusy ? 0.6 : 1 }}
+              >
+                {rowBusy && revisionMutationPending ? t('portalReviewBusy') : t('portalReviewRevise')}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  });
 }
 
 // ── QUESTIONNAIRE ─────────────────────────────────────────────
@@ -320,11 +435,11 @@ export default function PortalClientView() {
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [note, setNote] = useState('');
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
-  const [selectedArchiveWorkspaceId, setSelectedArchiveWorkspaceId] = useState(null);
   const [processingVideoId, setProcessingVideoId] = useState(null);
   const [revisionModalVideo, setRevisionModalVideo] = useState(null);
   const [revisionModalNote, setRevisionModalNote] = useState('');
   const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(null);
+  const [expandedArchiveWorkspaceId, setExpandedArchiveWorkspaceId] = useState(null);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -402,20 +517,6 @@ export default function PortalClientView() {
     }
   }, [data]);
 
-  useEffect(() => {
-    const firstWorkspaceId = data?.workspaceArchive?.[0]?._id || null;
-    if (!firstWorkspaceId) {
-      setSelectedArchiveWorkspaceId(null);
-      return;
-    }
-    const hasCurrentSelection = (data?.workspaceArchive ?? []).some(
-      (workspace) => workspace._id === selectedArchiveWorkspaceId,
-    );
-    if (!hasCurrentSelection) {
-      setSelectedArchiveWorkspaceId(firstWorkspaceId);
-    }
-  }, [data?.workspaceArchive, selectedArchiveWorkspaceId]);
-
   const reviewVideosGrouped = useMemo(() => {
     const OTHER = "__other__";
     const list = data?.reviewVideos ?? [];
@@ -466,10 +567,6 @@ export default function PortalClientView() {
   const { client={}, notes=[], workspaceCurrent=[], workspaceArchive=[], nextShoot=null, retainer } = data||{};
   const reviewVideos = data?.reviewVideos ?? [];
   const initials = (client.name||'').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-  const selectedArchiveWorkspace =
-    workspaceArchive.find((workspace) => workspace._id === selectedArchiveWorkspaceId) ||
-    workspaceArchive[0] ||
-    null;
   const shoot = nextShoot;
 
   return (
@@ -686,75 +783,28 @@ export default function PortalClientView() {
                           overflowY: 'auto',
                         }}
                       >
-                        {(ws.deliverables || []).length === 0 ? (
-                          <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-3)', fontStyle: 'italic' }}>
-                            {t('portalCurrentProjectsDeliverablesEmpty')}
-                          </p>
-                        ) : (
-                          (ws.deliverables || []).map((d) => {
-                            const isRevision = d.editFase === 'client_revision' || d.revision;
-                            const statusText = portalDeliverableStatusText(d, t);
-                            const statusColor =
-                              isRevision ? 'var(--amber)' : d.approved || d.editFase === 'client_approved' ? 'var(--sage)' : 'var(--text-3)';
-                            return (
-                              <div
-                                key={d._id}
-                                className="portal-archive-video-row"
-                                style={
-                                  isRevision
-                                    ? {
-                                        background: '#fffbeb',
-                                        borderColor: 'var(--amber)',
-                                      }
-                                    : undefined
-                                }
-                              >
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div className="portal-archive-video-name">{d.name}</div>
-                                  <div className="portal-archive-video-meta">
-                                    {t('portalArchiveBatch')} {d.batchName || '—'}
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: '11px',
-                                      fontWeight: 700,
-                                      marginTop: '4px',
-                                      color: statusColor,
-                                    }}
-                                  >
-                                    {statusText}
-                                  </div>
-                                  {isRevision && d.revisionNote && (
-                                    <div
-                                      style={{
-                                        marginTop: '6px',
-                                        fontSize: '11px',
-                                        color: 'var(--text-2)',
-                                        padding: '6px 8px',
-                                        background: 'rgba(212,168,75,.12)',
-                                        borderRadius: '6px',
-                                        borderLeft: '3px solid var(--amber)',
-                                      }}
-                                    >
-                                      <strong>{t('portalReviewRevisionLabel')}</strong> {d.revisionNote}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="portal-archive-video-actions">
-                                  {d.frameUrl ? (
-                                    <a href={d.frameUrl} target="_blank" rel="noopener noreferrer">
-                                      {t('portalReviewFrameBtn')}
-                                    </a>
-                                  ) : (
-                                    <span style={{ fontSize: '11px', color: 'var(--text-3)', fontStyle: 'italic' }}>
-                                      {t('portalReviewFrameMissing')}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
+                        <PortalWorkspaceDeliverablesList
+                          deliverables={ws.deliverables}
+                          emptyLabel={t('portalCurrentProjectsDeliverablesEmpty')}
+                          t={t}
+                          showClientActions
+                          onApproveVideo={(videoId) => {
+                            setProcessingVideoId(videoId);
+                            approveMut.mutate(videoId);
+                          }}
+                          onRequestRevisionVideo={(d) =>
+                            openRevisionModal({
+                              _id: d._id,
+                              name: d.name,
+                              revision: d.revision,
+                              revisionNote: d.revisionNote,
+                              frameUrl: d.frameUrl,
+                            })
+                          }
+                          processingVideoId={processingVideoId}
+                          approveMutationPending={approveMut.isPending}
+                          revisionMutationPending={revisionMut.isPending}
+                        />
                       </div>
                     )}
                   </div>
@@ -776,60 +826,88 @@ export default function PortalClientView() {
                 <p>{t('portalArchiveEmpty')}</p>
               </div>
             ) : (
-              <div className="portal-archive-layout">
-                <div className="portal-archive-workspaces">
-                  {workspaceArchive.map((workspace) => {
-                    const isActive = selectedArchiveWorkspace?._id === workspace._id;
-                    const videoCount = workspace.videos?.length || 0;
-                    return (
-                      <button
-                        key={workspace._id}
-                        type="button"
-                        className={`portal-archive-workspace-btn${isActive ? ' active' : ''}`}
-                        onClick={() => setSelectedArchiveWorkspaceId(workspace._id)}
-                      >
-                        <div className="portal-archive-workspace-top">
-                          <span>{workspace.emoji || '📁'}</span>
-                          <span>{workspace.name}</span>
-                        </div>
-                        <div className="portal-archive-workspace-meta">
-                          {videoCount === 1
-                            ? t('portalArchiveVideoCount', { n: videoCount })
-                            : t('portalArchiveVideoCountPlural', { n: videoCount })}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="portal-archive-videos">
-                  <div className="portal-archive-videos-header">
-                    {selectedArchiveWorkspace?.emoji || '📁'} {selectedArchiveWorkspace?.name || 'Workspace'}
-                  </div>
-                  {selectedArchiveWorkspace?.videos?.length ? (
-                    selectedArchiveWorkspace.videos.map((video) => (
-                      <div key={video._id} className="portal-archive-video-row">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {workspaceArchive.map((ws) => {
+                  const deliverables = Array.isArray(ws.deliverables)
+                    ? ws.deliverables
+                    : (ws.videos || []).map((v) => ({
+                        _id: v._id,
+                        name: v.name || t('portalArchiveVideoUnknown'),
+                        editFase: v.editFase,
+                        approved: !!v.approved,
+                        revision: !!v.revision,
+                        revisionNote: typeof v.revisionNote === 'string' ? v.revisionNote : '',
+                        batchName: v.batchName,
+                        batchId: v.batchId,
+                        frameUrl: v.frameUrl || '',
+                      }));
+                  const n = deliverables.length;
+                  return (
+                    <div
+                      key={ws._id}
+                      style={{
+                        background: 'var(--card)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '12px',
+                        padding: '16px 18px',
+                        boxShadow: '0 2px 12px rgba(28,20,16,.06)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '22px' }}>{ws.emoji || '📁'}</span>
+                        <div style={{ fontFamily: 'Montserrat', fontSize: '16px', fontWeight: 700 }}>{ws.name}</div>
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: 1.6 }}>
                         <div>
-                          <div className="portal-archive-video-name">{video.name || t('portalArchiveVideoUnknown')}</div>
-                          <div className="portal-archive-video-meta">
-                            {t('portalArchiveBatch')} {video.batchName || '—'}
-                          </div>
+                          <strong>{t('portalCurrentProjectsStage')}</strong> {t(workspaceStageTKey('completed'))}
                         </div>
-                        <div className="portal-archive-video-actions">
-                          {video.frameUrl ? (
-                            <a href={video.frameUrl} target="_blank" rel="noopener noreferrer">{t('portalArchiveViewFrame')}</a>
-                          ) : (
-                            <span style={{ fontSize: '12px', color: 'var(--text-3)' }}>{t('portalArchiveNoLinks')}</span>
-                          )}
+                        <div style={{ marginTop: '4px' }}>
+                          {n === 1 ? t('portalArchiveVideoCount', { n }) : t('portalArchiveVideoCountPlural', { n })}
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="empty-state" style={{ marginTop: '10px' }}>
-                      <div className="emoji">🎬</div>
-                      <p>{t('portalArchiveVideosEmpty')}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const id = String(ws._id);
+                          setExpandedArchiveWorkspaceId((prev) => (prev === id ? null : id));
+                        }}
+                        style={{
+                          marginTop: '12px',
+                          padding: '8px 14px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          fontFamily: 'inherit',
+                          cursor: 'pointer',
+                          borderRadius: '8px',
+                          border: '1.5px solid var(--border)',
+                          background: 'var(--bg-alt)',
+                          color: 'var(--text)',
+                        }}
+                      >
+                        {expandedArchiveWorkspaceId === String(ws._id)
+                          ? t('portalCurrentProjectsHideVideos')
+                          : t('portalCurrentProjectsShowVideos')}
+                      </button>
+                      {expandedArchiveWorkspaceId === String(ws._id) && (
+                        <div
+                          style={{
+                            marginTop: '12px',
+                            paddingTop: '12px',
+                            borderTop: '1px solid var(--border)',
+                            maxHeight: '280px',
+                            overflowY: 'auto',
+                          }}
+                        >
+                          <PortalWorkspaceDeliverablesList
+                            deliverables={deliverables}
+                            emptyLabel={t('portalArchiveVideosEmpty')}
+                            t={t}
+                          />
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })}
               </div>
             )}
           </div>
