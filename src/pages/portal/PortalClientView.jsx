@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useLang } from '../../context/LangContext';
@@ -44,10 +44,44 @@ function workspaceStageTKey(stage) {
   return map[stage] || 'wsStage_preproduction';
 }
 
+function portalDeliverableStatusText(d, t) {
+  if (d.approved || d.editFase === 'client_approved') return t('portalDeliverableStatusApproved');
+  if (d.editFase === 'client_revision' || d.revision) return t('portalReviewStatusRevision');
+  if (['waitreview', 'client_review'].includes(d.editFase)) return t('portalReviewStatusWaiting');
+  return t('portalDeliverableStatusInProgress');
+}
+
 function portalShootBadgeLabel(status, t) {
   if (status === "wrapped") return t("portalShootBadgeWrapped");
   if (status === "soon") return t("portalShootBadgeSoon");
   return t("portalShootBadgePlanned");
+}
+
+function PortalToastBar({ toast }) {
+  if (!toast) return null;
+  const isError = toast.type === "error";
+  return (
+    <div
+      role={isError ? "alert" : "status"}
+      aria-live="polite"
+      style={{
+        position: "fixed",
+        right: "24px",
+        bottom: "24px",
+        maxWidth: "min(360px, calc(100vw - 48px))",
+        background: isError ? "#9f3a3a" : "var(--text)",
+        color: "white",
+        borderRadius: "10px",
+        padding: "12px 16px",
+        fontSize: "13px",
+        zIndex: 2000,
+        boxShadow: "0 8px 24px rgba(28,20,16,.18)",
+        lineHeight: 1.4,
+      }}
+    >
+      {toast.message}
+    </div>
+  );
 }
 
 // ── QUESTIONNAIRE ─────────────────────────────────────────────
@@ -146,7 +180,7 @@ function getQuestionnaireMissingKeys(answers = {}) {
   return Q_FIELDS.filter((field) => !isQuestionnaireValueFilled(answers[field.key], field.type)).map((field) => field.key);
 }
 
-function Questionnaire({ clientName, onSubmit, t, lang }) {
+function Questionnaire({ clientName, onSubmit, onToast, t, lang }) {
   const topics = lang === "en" ? Q_TOPICS_EN : Q_TOPICS;
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
@@ -287,8 +321,12 @@ function Questionnaire({ clientName, onSubmit, t, lang }) {
             onClick={async()=>{
               setSubmitAttempted(true);
               if (!canSubmit) return;
-              await saveMut.mutateAsync({a:answers,s:true});
-              setSubmitted(true);
+              try {
+                await saveMut.mutateAsync({a:answers,s:true});
+                setSubmitted(true);
+              } catch (e) {
+                onToast?.(e?.message || t('portalToastQSubmitErr'), 'error');
+              }
             }}
             disabled={saveMut.isPending || !canSubmit}
             style={{background:(saveMut.isPending || !canSubmit)?'var(--border)':'var(--accent)',color:'white',border:'none',borderRadius:'10px',padding:'14px 32px',fontFamily:'Montserrat',fontSize:'15px',fontWeight:'700',cursor:(saveMut.isPending || !canSubmit)?'not-allowed':'pointer',display:'inline-flex',alignItems:'center',gap:'8px'}}>
@@ -312,18 +350,44 @@ export default function PortalClientView() {
   const [processingVideoId, setProcessingVideoId] = useState(null);
   const [revisionModalVideo, setRevisionModalVideo] = useState(null);
   const [revisionModalNote, setRevisionModalNote] = useState('');
+  const [expandedWorkspaceId, setExpandedWorkspaceId] = useState(null);
+  const [toast, setToast] = useState(null);
   const qc = useQueryClient();
+
+  const showToast = useCallback((message, type = 'success') => {
+    setToast({ message, type });
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const id = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(id);
+  }, [toast]);
 
   const { data, isLoading } = useQuery({
     queryKey:['portalMe'],
     queryFn: getPortalMe,
     refetchInterval: showQuestionnaire ? false : 8000,
   });
-  const noteMut     = useMutation({ mutationFn: sendClientNote, onSuccess: ()=>{ setNote(''); qc.invalidateQueries({ queryKey: ['portalMe'] }); }});
+  const noteMut     = useMutation({
+    mutationFn: sendClientNote,
+    onSuccess: () => {
+      setNote('');
+      qc.invalidateQueries({ queryKey: ['portalMe'] });
+      showToast(t('portalToastNoteOk'), 'success');
+    },
+    onError: (e) => {
+      showToast(e?.message || t('portalToastNoteErr'), 'error');
+    },
+  });
   const approveMut = useMutation({
     mutationFn: approveVideo,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portalMe'] });
+      showToast(t('portalToastApproveOk'), 'success');
+    },
+    onError: (e) => {
+      showToast(e?.message || t('portalToastApproveErr'), 'error');
     },
     onSettled: () => {
       setProcessingVideoId(null);
@@ -333,6 +397,10 @@ export default function PortalClientView() {
     mutationFn: ({ videoId, note: revisionNote }) => requestRevision(videoId, revisionNote),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['portalMe'] });
+      showToast(t('portalToastRevisionOk'), 'success');
+    },
+    onError: (e) => {
+      showToast(e?.message || t('portalToastRevisionErr'), 'error');
     },
     onSettled: () => {
       setProcessingVideoId(null);
@@ -418,7 +486,8 @@ export default function PortalClientView() {
             EN
           </button>
         </div>
-        <Questionnaire clientName={data?.client?.name} onSubmit={()=>{ setShowQuestionnaire(false); qc.invalidateQueries({ queryKey: ['portalMe'] }); }} t={t} lang={lang} />
+        <Questionnaire clientName={data?.client?.name} onSubmit={()=>{ setShowQuestionnaire(false); qc.invalidateQueries({ queryKey: ['portalMe'] }); }} onToast={showToast} t={t} lang={lang} />
+        <PortalToastBar toast={toast} />
       </>
     );
   }
@@ -613,6 +682,110 @@ export default function PortalClientView() {
                         <div><strong>{t('portalCurrentProjectsDeadline')}</strong> {fmtDate(ws.deadline, lang)}</div>
                       )}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const id = String(ws._id);
+                        setExpandedWorkspaceId((prev) => (prev === id ? null : id));
+                      }}
+                      style={{
+                        marginTop: '12px',
+                        padding: '8px 14px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        fontFamily: 'inherit',
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        border: '1.5px solid var(--border)',
+                        background: 'var(--bg-alt)',
+                        color: 'var(--text)',
+                      }}
+                    >
+                      {expandedWorkspaceId === String(ws._id)
+                        ? t('portalCurrentProjectsHideVideos')
+                        : t('portalCurrentProjectsShowVideos')}
+                    </button>
+                    {expandedWorkspaceId === String(ws._id) && (
+                      <div
+                        style={{
+                          marginTop: '12px',
+                          paddingTop: '12px',
+                          borderTop: '1px solid var(--border)',
+                          maxHeight: '280px',
+                          overflowY: 'auto',
+                        }}
+                      >
+                        {(ws.deliverables || []).length === 0 ? (
+                          <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-3)', fontStyle: 'italic' }}>
+                            {t('portalCurrentProjectsDeliverablesEmpty')}
+                          </p>
+                        ) : (
+                          (ws.deliverables || []).map((d) => {
+                            const isRevision = d.editFase === 'client_revision' || d.revision;
+                            const statusText = portalDeliverableStatusText(d, t);
+                            const statusColor =
+                              isRevision ? 'var(--amber)' : d.approved || d.editFase === 'client_approved' ? 'var(--sage)' : 'var(--text-3)';
+                            return (
+                              <div
+                                key={d._id}
+                                className="portal-archive-video-row"
+                                style={
+                                  isRevision
+                                    ? {
+                                        background: '#fffbeb',
+                                        borderColor: 'var(--amber)',
+                                      }
+                                    : undefined
+                                }
+                              >
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div className="portal-archive-video-name">{d.name}</div>
+                                  <div className="portal-archive-video-meta">
+                                    {t('portalArchiveBatch')} {d.batchName || '—'}
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      marginTop: '4px',
+                                      color: statusColor,
+                                    }}
+                                  >
+                                    {statusText}
+                                  </div>
+                                  {isRevision && d.revisionNote && (
+                                    <div
+                                      style={{
+                                        marginTop: '6px',
+                                        fontSize: '11px',
+                                        color: 'var(--text-2)',
+                                        padding: '6px 8px',
+                                        background: 'rgba(212,168,75,.12)',
+                                        borderRadius: '6px',
+                                        borderLeft: '3px solid var(--amber)',
+                                      }}
+                                    >
+                                      <strong>{t('portalReviewRevisionLabel')}</strong> {d.revisionNote}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="portal-archive-video-actions">
+                                  {d.frameUrl ? (
+                                    <a href={d.frameUrl} target="_blank" rel="noopener noreferrer">
+                                      {t('portalReviewFrameBtn')}
+                                    </a>
+                                  ) : (
+                                    <span style={{ fontSize: '11px', color: 'var(--text-3)', fontStyle: 'italic' }}>
+                                      {t('portalReviewFrameMissing')}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -835,6 +1008,7 @@ export default function PortalClientView() {
           </div>
         </div>
       )}
+      <PortalToastBar toast={toast} />
     </div>
   );
 }

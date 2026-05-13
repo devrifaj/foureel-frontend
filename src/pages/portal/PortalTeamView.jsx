@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getBatches,
@@ -11,6 +11,7 @@ import {
   updateVideo,
 } from "../../api";
 import { useAuth } from "../../context/AuthContext";
+import { useLang } from "../../context/LangContext";
 import { DASHBOARD_BASE } from "../../paths";
 import LoadingSpinner from "../../components/LoadingSpinner";
 
@@ -32,12 +33,51 @@ function useClientPortalData(clientId) {
   };
 }
 
+function PortalAdminToastBar({ toast }) {
+  if (!toast) return null;
+  const isError = toast.type === "error";
+  return (
+    <div
+      role={isError ? "alert" : "status"}
+      aria-live="polite"
+      style={{
+        position: "fixed",
+        right: "24px",
+        bottom: "24px",
+        maxWidth: "min(360px, calc(100vw - 48px))",
+        background: isError ? "#9f3a3a" : "var(--text)",
+        color: "white",
+        borderRadius: "10px",
+        padding: "12px 16px",
+        fontSize: "13px",
+        zIndex: 2000,
+        boxShadow: "0 8px 24px rgba(28,20,16,.18)",
+        lineHeight: 1.4,
+      }}
+    >
+      {toast.message}
+    </div>
+  );
+}
+
 export default function PortalTeamView() {
   const { user, logout } = useAuth();
+  const { t } = useLang();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [reply, setReply] = useState("");
+  const [toast, setToast] = useState(null);
+
+  const showToast = useCallback((message, type = "success") => {
+    setToast({ message, type });
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const id = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(id);
+  }, [toast]);
 
   const clientsQuery = useQuery({
     queryKey: ["clients"],
@@ -70,19 +110,37 @@ export default function PortalTeamView() {
     onSuccess: () => {
       setReply("");
       qc.invalidateQueries({ queryKey: ["portalNotes", clientId] });
+      showToast(t("portalAdminToastNoteOk"), "success");
+    },
+    onError: (e) => {
+      showToast(e?.message || t("portalAdminToastNoteErr"), "error");
     },
   });
   const videoMut = useMutation({
     mutationFn: ({ batchId, videoId, payload }) => updateVideo(batchId, videoId, payload),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["portalVideos", clientId] });
       qc.invalidateQueries({ queryKey: ["batches"] });
+      const { payload } = variables;
+      let msg = t("portalAdminToastVideoReviewOk");
+      if (payload.approved) msg = t("portalAdminToastVideoApprovedOk");
+      else if (payload.editFase === "client_revision") msg = t("portalAdminToastVideoRevisionOk");
+      showToast(msg, "success");
+    },
+    onError: (e) => {
+      showToast(e?.message || t("portalAdminToastVideoErr"), "error");
     },
   });
 
   const readMut = useMutation({
     mutationFn: () => markNotesRead(clientId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["portalNotes", clientId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["portalNotes", clientId] });
+      showToast(t("portalAdminToastReadOk"), "success");
+    },
+    onError: (e) => {
+      showToast(e?.message || t("portalAdminToastReadErr"), "error");
+    },
   });
 
   const unreadByClient = useMemo(() => unreadSummary?.byClient || {}, [unreadSummary]);
@@ -522,6 +580,7 @@ export default function PortalTeamView() {
           </section>
         </div>
       </main>
+      <PortalAdminToastBar toast={toast} />
     </div>
   );
 }
